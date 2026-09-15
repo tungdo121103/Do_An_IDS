@@ -1,0 +1,4 @@
+model,accuracy,precision_ddos,recall_ddos,f1_ddos,false_positive,false_negative,train_time_sec,prediction_time_sec
+Decision Tree,0.9996,0.9994,0.999,0.9992,6,10,4.5483,0.0167
+Random Forest,0.999675,1.0,0.9987,0.99935,0,13,10.8622,0.163
+LightGBM,0.999675,0.9998,0.9989,0.99935,2,11,7.3616,0.183

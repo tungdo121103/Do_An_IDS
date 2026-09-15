@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+
+# Machine virtual disk files and raw heavy dataset
+VMs/
+dataset/
+
+# System / IDE files
+.vscode/
+.idea/
+.DS_Store
+
+# Runtime dashboard outputs
+data/ids_logs.db
+data/live_flows.csv

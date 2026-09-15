@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Realtime DDoS IDS Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">IDS</span>
+      <div>
+        <h1>DDoS Monitor</h1>
+        <p>Machine Learning Realtime IDS</p>
+      </div>
+    </div>
+    <nav>
+      <button class="active" data-tab="overview">Overview</button>
+      <button data-tab="alerts">Alerts</button>
+      <button data-tab="traffic">Traffic</button>
+      <button data-tab="model">Model</button>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <h2 id="page-title">Realtime Detection Dashboard</h2>
+        <p id="page-subtitle">Live sensor mode: reading packets from IDS ens33.</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="model-picker" id="model-picker">
+          <span>Model</span>
+          <button id="model-dropdown-button" class="model-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="model-dropdown-label">Random Forest</span>
+          </button>
+          <div id="model-dropdown-menu" class="model-dropdown-menu" role="listbox"></div>
+        </div>
+        <button id="start-btn" class="control primary" type="button">Start</button>
+        <button id="pause-btn" class="control" type="button">Pause</button>
+        <button id="reset-btn" class="control danger" type="button">Reset</button>
+        <div id="system-status" class="status normal">Paused</div>
+      </div>
+    </header>
+
+    <section class="metrics">
+      <article>
+        <span>Total Flows</span>
+        <strong id="total-flows">0</strong>
+      </article>
+      <article>
+        <span>DDoS Flows</span>
+        <strong id="total-attacks">0</strong>
+      </article>
+      <article>
+        <span>Benign Flows</span>
+        <strong id="total-benign">0</strong>
+      </article>
+      <article>
+        <span>Last Attack Rate</span>
+        <strong id="attack-rate">0%</strong>
+      </article>
+    </section>
+
+    <section class="tab-page active" id="tab-overview">
+      <div class="content-grid">
+        <div class="panel chart-panel">
+          <div class="panel-title">
+            <h3>Traffic Classification</h3>
+            <span>updates every 2s</span>
+          </div>
+          <canvas id="traffic-chart" width="900" height="320"></canvas>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <h3>Recent Alerts</h3>
+            <span id="last-batch">0 flows</span>
+          </div>
+          <div id="alerts" class="alerts"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="tab-alerts">
+      <div class="panel wide-panel">
+        <div class="panel-title">
+          <h3>Alert Timeline</h3>
+          <span>latest detections</span>
+        </div>
+        <div id="alerts-table" class="table-like"></div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="tab-traffic">
+      <div class="content-grid">
+        <div class="panel chart-panel">
+          <div class="panel-title">
+            <h3>Batch Traffic Trend</h3>
+            <span>DDoS vs benign flows</span>
+          </div>
+          <canvas id="traffic-detail-chart" width="900" height="320"></canvas>
+        </div>
+        <div class="panel">
+          <div class="panel-title">
+            <h3>Latest Batch</h3>
+            <span>live summary</span>
+          </div>
+          <div class="detail-list">
+            <div><span>Batch Size</span><strong id="detail-batch">0</strong></div>
+            <div><span>Attack Rate</span><strong id="detail-rate">0%</strong></div>
+            <div><span>Status</span><strong id="detail-status">Paused</strong></div>
+            <div><span>Input</span><strong id="detail-input">none</strong></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tab-page" id="tab-model">
+      <div class="content-grid">
+        <div class="panel">
+          <div class="panel-title">
+            <h3>Model Information</h3>
+            <span>loaded locally</span>
+          </div>
+          <div class="detail-list">
+            <div><span>Algorithm</span><strong id="model-algorithm">Random Forest</strong></div>
+            <div><span>Active Model</span><strong id="model-active">Random Forest</strong></div>
+            <div><span>Feature File</span><strong>feature_columns.joblib</strong></div>
+            <div><span>Input Mode</span><strong>Live sensor only</strong></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">
+            <h3>Realtime Pipeline</h3>
+            <span>current flow</span>
+          </div>
+          <ol class="pipeline">
+            <li>Read flow batch from data/live_flows.csv</li>
+            <li>Wait for live traffic from sensor</li>
+            <li>Clean NaN and Infinity values</li>
+            <li>Predict BENIGN or DDoS</li>
+            <li>Write ordered results into SQLite</li>
+            <li>Dashboard renders ordered database rows</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
+
+
