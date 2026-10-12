@@ -84,8 +84,10 @@ D:\DoAn_IDS_DDoS\
 │           ├── DrDoS_DNS.csv
 │           └── ...
 ├── models\
-│   ├── ddos_random_forest.joblib
-│   └── feature_columns.joblib
+│   ├── ddos_v2\
+│   │   ├── ddos_random_forest_v2.joblib
+│   │   ├── ddos_lightgbm_v2.joblib
+│   │   └── ddos_feature_manifest_v2.json
 ├── notebooks\
 └── src\
     ├── check_dataset.py
@@ -163,20 +165,21 @@ DDoS = TOTAL - BENIGN
 
 Nếu train trực tiếp toàn bộ dữ liệu, mô hình dễ bị thiên về lớp DDoS. Vì vậy cần lấy mẫu lại để cân bằng tương đối.
 
-Tỉ lệ train đề xuất:
+Tập train/test được xây dựng lại từ cả 19 file với số lượng cố định:
 
 ```text
-BENIGN: khoảng 80,000 mẫu
-DDoS:   khoảng 160,000 mẫu
+BENIGN: 150,000 mẫu
+DDoS:    50,000 mẫu
+Tổng:   200,000 flow
 ```
 
 Tỉ lệ:
 
 ```text
-BENIGN : DDoS = 1 : 2
+BENIGN : DDoS = 3 : 1
 ```
 
-Tỉ lệ này hợp lý cho đồ án vì vẫn tập trung vào phát hiện DDoS nhưng không bỏ qua lớp bình thường.
+Các mẫu DDoS được phân bổ giữa nhiều nhóm tấn công. Khi chia dữ liệu bằng `stratify=y`, tập train có 160.000 flow và tập test có 40.000 flow.
 
 ## 7. Các cột cần loại bỏ trước khi train
 
@@ -210,7 +213,9 @@ Lý do:
 | Timestamp | Không ổn định khi chạy realtime |
 | SimillarHTTP | Có thể là text/object, dễ gây lỗi khi train |
 
-Sau khi loại bỏ, còn khoảng 79 feature số dùng cho mô hình.
+Sau khi loại bỏ các cột định danh, dữ liệu còn 79 feature số của CIC-DDoS2019. Đây là bộ feature ứng viên, chưa phải toàn bộ đầu vào triển khai realtime.
+
+Trong phiên bản v2, nhóm tiếp tục lựa chọn 46 feature mà `live_sensor.py` có thể tính thống nhất. Model và sensor đều đọc thứ tự feature từ `models/ddos_v2/ddos_feature_manifest_v2.json`.
 
 ## 8. Quy trình tiền xử lý dữ liệu
 
@@ -225,6 +230,7 @@ Quy trình tiền xử lý:
 -> ép feature về dạng số
 -> xử lý Infinity thành NaN
 -> thay NaN bằng 0
+-> lựa chọn 46 feature tương thích với live sensor
 -> shuffle dữ liệu
 -> chia train/test
 ```
@@ -243,15 +249,14 @@ Bài toán của đồ án là binary classification:
 1 = lưu lượng tấn công DDoS
 ```
 
-## 9. Thuật toán học máy nên so sánh
+## 9. Thuật toán học máy được sử dụng
 
-Nên so sánh ít nhất 3 mô hình:
+Phiên bản v2 huấn luyện và so sánh hai mô hình:
 
 | Mô hình | Vai trò |
 |---|---|
-| Decision Tree | Baseline, nhanh, dễ giải thích |
 | Random Forest | Mô hình chính, ổn định với dữ liệu dạng bảng |
-| XGBoost | Mô hình nâng cao, thường mạnh với tabular data |
+| LightGBM | Mô hình so sánh, tốc độ huấn luyện nhanh |
 
 Nếu muốn nhẹ hơn có thể thay XGBoost bằng Logistic Regression.
 
@@ -272,72 +277,53 @@ Trong hệ thống IDS, cần chú ý đặc biệt tới:
 - Recall của lớp DDoS: tránh bỏ sót tấn công.
 - False Positive của lớp BENIGN: tránh cảnh báo nhầm quá nhiều.
 
-## 10. Kết quả train hiện tại
+## 10. Kết quả train phiên bản v2
 
-Lần train gần nhất trên Kaggle dùng 4 file:
-
-```text
-UDPLag.csv
-DrDoS_UDP.csv
-Syn.csv
-DrDoS_DNS.csv
-```
-
-Kết quả:
+Phiên bản v2 sử dụng dữ liệu lấy mẫu từ đủ 19 file CSV trong dataset Kaggle. Sau tiền xử lý, dữ liệu có 200.000 flow và 46 feature.
 
 ```text
-Data shape: (200000, 79)
-DDoS:   196,674
-BENIGN:   3,326
-Accuracy: 0.99995
+Data shape: (200000, 46)
+BENIGN: 150,000
+DDoS:    50,000
+Train: 160,000
+Test:   40,000
 ```
 
-Confusion matrix:
+Kết quả trên tập test:
 
-```text
-[[  664     1]
- [    1 39334]]
-```
+| Model | Accuracy | Precision DDoS | Recall DDoS | F1-score DDoS | FP | FN |
+|---|---:|---:|---:|---:|---:|---:|
+| Random Forest v2 | 0.999450 | 0.999800 | 0.998000 | 0.998899 | 2 | 20 |
+| LightGBM v2 | 0.999625 | 0.999500 | 0.999000 | 0.999250 | 5 | 10 |
 
-Giải thích:
-
-```text
-BENIGN đúng: 664
-BENIGN bị nhầm thành DDoS: 1
-DDoS bị nhầm thành BENIGN: 1
-DDoS đúng: 39,334
-```
-
-Đánh giá:
-
-- Mô hình đã chạy được.
-- Kết quả offline rất cao.
-- Tuy nhiên tập dữ liệu đang mất cân bằng mạnh.
-- Cần train lại với dữ liệu cân bằng hơn để kết quả đáng tin hơn.
+LightGBM v2 có Recall và F1-score cao hơn trên tập test; Random Forest v2 có ít false positive hơn. Cả hai model đều được lưu để lựa chọn trong dashboard.
 
 ## 11. File output sau khi train
 
-Sau khi train trên Kaggle, cần tải về 2 file:
+Sau khi train trên Kaggle, tải thư mục output gồm:
 
 ```text
-ddos_random_forest.joblib
-feature_columns.joblib
+ddos_random_forest_v2.joblib
+ddos_lightgbm_v2.joblib
+ddos_feature_manifest_v2.json
+ddos_model_comparison_v2.csv
 ```
 
 Copy vào local:
 
 ```text
-D:\DoAn_IDS_DDoS\models\
+D:\DoAn_IDS_DDoS\models\ddos_v2\
 ```
 
 Vai trò:
 
 | File | Vai trò |
 |---|---|
-| ddos_random_forest.joblib | Mô hình Random Forest đã train |
-| feature_columns.joblib | Danh sách 79 cột feature dùng khi train |
+| ddos_random_forest_v2.joblib | Mô hình Random Forest với 46 feature |
+| ddos_lightgbm_v2.joblib | Mô hình LightGBM với 46 feature |
+| ddos_feature_manifest_v2.json | Danh sách 46 feature và thứ tự đầu vào |
 
-Khi predict realtime phải dùng đúng các cột trong `feature_columns.joblib`.
+Khi predict realtime, sensor và detector phải dùng đúng thứ tự trong `ddos_feature_manifest_v2.json`.
 
 ## 12. Kiểm tra model local
 
@@ -350,8 +336,8 @@ python src\test_model.py
 Kết quả mong đợi:
 
 ```text
-Features: 79
-Sample shape: (20, 79)
+Features: 46
+Sample shape: (20, 46)
 Predictions: DDoS
 ```
 
@@ -513,35 +499,39 @@ for root, dirs, files in os.walk("/kaggle/input"):
 DATASET_DIR = Path("/kaggle/input/datasets/dqt123/model-ids")
 ```
 
-6. Train model.
-7. Lưu output:
+6. Tạo tập 200.000 flow từ 19 file, lọc 46 feature và chia train/test 80/20.
+7. Train Random Forest và LightGBM.
+8. Lưu output:
 
 ```python
-joblib.dump(model, "/kaggle/working/ddos_random_forest.joblib")
-joblib.dump(feature_columns, "/kaggle/working/feature_columns.joblib")
+import json
+
+joblib.dump(model, "/kaggle/working/ddos_v2/ddos_random_forest_v2.joblib")
+with open("/kaggle/working/ddos_v2/ddos_feature_manifest_v2.json", "w") as file:
+    json.dump(manifest, file, ensure_ascii=False, indent=2)
 ```
 
-8. Tải 2 file `.joblib` về local và copy vào `models`.
+9. Tải thư mục output về local và copy vào `models/ddos_v2`.
 
-## 19. Hướng train lại tốt hơn
+## 19. Quy trình train v2 đã thực hiện
 
-Để mô hình đáng tin hơn, nên train lại theo hướng cân bằng:
+Phiên bản v2 đã thực hiện theo quy trình:
 
 ```text
-Lấy toàn bộ BENIGN trong 19 file, tối đa khoảng 80k
-Lấy sample DDoS khoảng 160k
-Tổng khoảng 240k flow
+Lấy mẫu 150,000 BENIGN và 50,000 DDoS từ đủ 19 file
+Lựa chọn 46 feature có thể tính trong live sensor
+Tổng 200,000 flow
 Shuffle
-Train/test split stratify
-Train Decision Tree, Random Forest, XGBoost
+Train/test split 80/20 với stratify
+Train Random Forest và LightGBM
 So sánh kết quả
-Chọn model phù hợp nhất
+Tích hợp hai model vào dashboard
 ```
 
 Tỉ lệ đề xuất:
 
 ```text
-BENIGN : DDoS = 1 : 2
+BENIGN : DDoS = 3 : 1
 ```
 
 Đây là tỉ lệ hợp lý hơn so với việc train gần như toàn DDoS.
@@ -568,14 +558,14 @@ Câu mô tả ngắn gọn:
 
 - Dashboard hiện tại mới chạy realtime simulation bằng CSV.
 - Chưa nối với traffic thật từ IDS VM.
-- Mô hình lần train đầu còn mất cân bằng lớp.
+- Model v2 đã cân bằng dữ liệu theo tỷ lệ 150.000 BENIGN và 50.000 DDoS.
 - Cần thống nhất version scikit-learn giữa Kaggle và local để tránh warning.
 - Cần trích xuất feature realtime đúng format với feature lúc train.
 
 ## 22. Hướng phát triển
 
-- Train lại bằng dữ liệu cân bằng hơn.
-- So sánh Decision Tree, Random Forest, XGBoost.
+- Đánh giá thêm trên traffic SYN/UDP trong môi trường VM.
+- So sánh kết quả offline và realtime trên cùng feature manifest.
 - Thêm Start/Pause/Reset cho dashboard.
 - Tách module detection riêng khỏi dashboard.
 - Nối IDS VM với CICFlowMeter/tshark/Zeek để lấy flow realtime.
@@ -589,13 +579,12 @@ Câu mô tả ngắn gọn:
 
 ```text
 Dataset CIC-DDoS2019
-Model Random Forest train trên Kaggle
-File model .joblib
-Feature columns .joblib
+Model Random Forest và LightGBM v2 train trên Kaggle
+Hai file model .joblib và manifest 46 feature
 Script test model local
 Dashboard Flask
 SQLite log database
 Realtime simulation pipeline
 ```
 
-Bước quan trọng tiếp theo là train lại model với dữ liệu cân bằng hơn và sau đó nối pipeline với traffic thật trong môi trường VM.
+Bước tiếp theo là kiểm thử model v2 với traffic thật trong môi trường VM và ghi nhận kết quả trên `live_flows.csv`.

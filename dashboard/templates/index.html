@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Realtime DDoS IDS Dashboard</title>
+  <title>Realtime DDoS and SSH IDS Dashboard</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <div class="brand">
       <span class="brand-mark">IDS</span>
       <div>
-        <h1>DDoS Monitor</h1>
+        <h1>IDS Monitor</h1>
         <p>Machine Learning Realtime IDS</p>
       </div>
     </div>
@@ -26,12 +26,12 @@
   <main>
     <header class="topbar">
       <div>
-        <h2 id="page-title">Realtime Detection Dashboard</h2>
-        <p id="page-subtitle">Live sensor mode: reading packets from IDS ens33.</p>
+        <h2 id="page-title">DDoS &amp; SSH Detection Dashboard</h2>
+        <p id="page-subtitle">Live sensor on IDS ens33: TCP/22 uses SSH detection; other flows use DDoS detection.</p>
       </div>
       <div class="topbar-actions">
         <div class="model-picker" id="model-picker">
-          <span>Model</span>
+          <span>Algorithm for both detectors</span>
           <button id="model-dropdown-button" class="model-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false">
             <span id="model-dropdown-label">Random Forest</span>
           </button>
@@ -51,7 +51,11 @@
       </article>
       <article>
         <span>DDoS Flows</span>
-        <strong id="total-attacks">0</strong>
+        <strong id="total-ddos">0</strong>
+      </article>
+      <article>
+        <span>SSH Brute Force Flows</span>
+        <strong id="total-ssh">0</strong>
       </article>
       <article>
         <span>Benign Flows</span>
@@ -98,7 +102,7 @@
         <div class="panel chart-panel">
           <div class="panel-title">
             <h3>Batch Traffic Trend</h3>
-            <span>DDoS vs benign flows</span>
+            <span>Benign, DDoS and SSH flows</span>
           </div>
           <canvas id="traffic-detail-chart" width="900" height="320"></canvas>
         </div>
@@ -127,7 +131,8 @@
           <div class="detail-list">
             <div><span>Algorithm</span><strong id="model-algorithm">Random Forest</strong></div>
             <div><span>Active Model</span><strong id="model-active">Random Forest</strong></div>
-            <div><span>Feature File</span><strong>feature_columns.joblib</strong></div>
+            <div><span>DDoS Manifest</span><strong>ddos_feature_manifest_v2.json (46)</strong></div>
+            <div><span>SSH Manifest</span><strong>ssh_feature_manifest_v1.json (45)</strong></div>
             <div><span>Input Mode</span><strong>Live sensor only</strong></div>
           </div>
         </div>
@@ -140,7 +145,8 @@
             <li>Read flow batch from data/live_flows.csv</li>
             <li>Wait for live traffic from sensor</li>
             <li>Clean NaN and Infinity values</li>
-            <li>Predict BENIGN or DDoS</li>
+            <li>Route TCP port 22 to SSH model; other flows to DDoS model</li>
+            <li>Predict BENIGN, DDoS or SSH Brute Force</li>
             <li>Write ordered results into SQLite</li>
             <li>Dashboard renders ordered database rows</li>
           </ol>

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from flask import Flask, jsonify, render_template, request
 
@@ -18,10 +20,15 @@ app = Flask(__name__)
 detector = FlowDetector()
 
 
-def get_db() -> sqlite3.Connection:
+@contextmanager
+def get_db() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
-    return connection
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 
 def ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -42,6 +49,7 @@ def init_db() -> None:
                 batch_no INTEGER,
                 input_source TEXT,
                 model_name TEXT,
+                attack_type TEXT,
                 batch_total INTEGER NOT NULL,
                 attack_count INTEGER NOT NULL,
                 benign_count INTEGER NOT NULL,
@@ -57,9 +65,11 @@ def init_db() -> None:
         ensure_column(connection, "flow_logs", "batch_no", "INTEGER")
         ensure_column(connection, "flow_logs", "input_source", "TEXT")
         ensure_column(connection, "flow_logs", "model_name", "TEXT")
+        ensure_column(connection, "flow_logs", "attack_type", "TEXT")
         connection.execute("UPDATE flow_logs SET batch_no = id WHERE batch_no IS NULL")
         connection.execute("UPDATE flow_logs SET input_source = 'legacy' WHERE input_source IS NULL")
         connection.execute("UPDATE flow_logs SET model_name = 'Random Forest' WHERE model_name IS NULL")
+        connection.execute("UPDATE flow_logs SET attack_type = 'ddos' WHERE attack_type IS NULL")
 
 
 def load_dashboard_data() -> dict:
@@ -69,6 +79,8 @@ def load_dashboard_data() -> dict:
             SELECT
                 COALESCE(SUM(batch_total), 0) AS total_flows,
                 COALESCE(SUM(attack_count), 0) AS total_attacks,
+                COALESCE(SUM(CASE WHEN attack_type = 'ddos' THEN attack_count ELSE 0 END), 0) AS total_ddos,
+                COALESCE(SUM(CASE WHEN attack_type = 'ssh' THEN attack_count ELSE 0 END), 0) AS total_ssh,
                 COALESCE(SUM(benign_count), 0) AS total_benign
             FROM flow_logs
             """
@@ -82,7 +94,7 @@ def load_dashboard_data() -> dict:
         ).fetchone()
         history_rows = connection.execute(
             """
-            SELECT batch_no, created_at, input_source, model_name, batch_total, attack_count, benign_count, attack_rate
+            SELECT batch_no, created_at, input_source, model_name, attack_type, batch_total, attack_count, benign_count, attack_rate
             FROM flow_logs
             ORDER BY id DESC
             LIMIT ?
@@ -106,8 +118,11 @@ def load_dashboard_data() -> dict:
             "time": row["created_at"].split()[-1],
             "input_source": row["input_source"],
             "model_name": row["model_name"],
+            "attack_type": row["attack_type"],
             "flows": row["batch_total"],
             "attacks": row["attack_count"],
+            "ddos": row["attack_count"] if row["attack_type"] == "ddos" else 0,
+            "ssh": row["attack_count"] if row["attack_type"] == "ssh" else 0,
             "benign": row["benign_count"],
             "attack_rate": row["attack_rate"],
         }
@@ -136,6 +151,8 @@ def load_dashboard_data() -> dict:
     return {
         "total_flows": totals["total_flows"],
         "total_attacks": totals["total_attacks"],
+        "total_ddos": totals["total_ddos"],
+        "total_ssh": totals["total_ssh"],
         "total_benign": totals["total_benign"],
         "last_batch": latest["batch_total"] if latest else 0,
         "last_attack_rate": latest["attack_rate"] if latest else 0,

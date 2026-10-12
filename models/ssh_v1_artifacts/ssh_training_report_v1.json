@@ -1,0 +1,25 @@
+{
+  "model": "Random Forest",
+  "features": 45,
+  "train_rows": 14575,
+  "test_rows": 3644,
+  "train_label_counts": {
+    "BENIGN": 12000,
+    "SSH-Patator": 2575
+  },
+  "test_label_counts": {
+    "BENIGN": 3000,
+    "SSH-Patator": 644
+  },
+  "accuracy": 0.9986278814489572,
+  "precision_ssh": 1.0,
+  "recall_ssh": 0.9922360248447205,
+  "f1_ssh": 0.9961028838659393,
+  "confusion_matrix": {
+    "TN": 3000,
+    "FP": 0,
+    "FN": 5,
+    "TP": 639
+  },
+  "train_seconds": 1.5356948375701904
+}

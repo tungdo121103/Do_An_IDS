@@ -1,0 +1,17 @@
+{
+  "model": "LightGBM",
+  "features": 45,
+  "train_rows": 14575,
+  "test_rows": 3644,
+  "accuracy": 0.9991767288693744,
+  "precision_ssh": 0.9984447900466563,
+  "recall_ssh": 0.9968944099378882,
+  "f1_ssh": 0.9976689976689976,
+  "confusion_matrix": {
+    "TN": 2999,
+    "FP": 1,
+    "FN": 2,
+    "TP": 642
+  },
+  "train_seconds": 0.4632301330566406
+}

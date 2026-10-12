@@ -62,21 +62,26 @@ Phân bố sau khi lấy mẫu:
 | Label | Số mẫu |
 |---|---:|
 | BENIGN | 150,000 |
-| DrDoS_LDAP | 4,167 |
-| DrDoS_SSDP | 4,167 |
-| DrDoS_UDP | 4,167 |
-| DrDoS_NetBIOS | 4,167 |
-| DrDoS_MSSQL | 4,167 |
-| DrDoS_SNMP | 4,167 |
-| DrDoS_NTP | 4,167 |
-| DrDoS_DNS | 4,167 |
-| Syn | 4,166 |
-| TFTP | 4,166 |
-| Portmap | 4,166 |
-| UDP-lag | 4,155 |
-| WebDDoS | 11 |
+| DrDoS_MSSQL | 2,981 |
+| LDAP | 2,981 |
+| DrDoS_SSDP | 2,981 |
+| MSSQL | 2,981 |
+| DrDoS_SNMP | 2,981 |
+| DrDoS_NTP | 2,981 |
+| DrDoS_LDAP | 2,981 |
+| DrDoS_UDP | 2,981 |
+| DrDoS_NetBIOS | 2,981 |
+| DrDoS_DNS | 2,981 |
+| TFTP | 2,980 |
+| Portmap | 2,980 |
+| NetBIOS | 2,980 |
+| Syn | 2,980 |
+| UDP-lag | 2,979 |
+| UDP | 2,979 |
+| UDPLag | 1,873 |
+| WebDDoS | 439 |
 
-Tổng số mẫu DDoS là 50,000. Nhãn `WebDDoS` xuất hiện trong nhóm `UDPLag`, nên tổng nhóm này vẫn đạt 4,166 mẫu.
+Tổng số mẫu DDoS là 50,000. Các nhãn được lấy từ đủ 19 file và phân bổ theo khả năng lấy mẫu của từng nhóm.
 
 ## 4. Tiền xử lý dữ liệu
 
@@ -118,7 +123,8 @@ Sau khi tiền xử lý:
 | Dữ liệu | Kích thước |
 |---|---:|
 | Dữ liệu ban đầu | 200,000 dòng, 88 cột |
-| Dữ liệu sau khi loại cột thừa | 200,000 dòng, 79 feature |
+| Sau khi loại cột định danh | 200,000 dòng, 79 feature ứng viên |
+| Sau khi lựa chọn feature triển khai | 200,000 dòng, 46 feature |
 
 Các giá trị không hợp lệ được xử lý như sau:
 
@@ -183,10 +189,13 @@ Sau bước này, `X` chỉ còn các feature số mô tả hành vi của flow 
 - `Packet Length Mean`
 - `SYN Flag Count`
 - `ACK Flag Count`
-- `Idle Mean`
-- `Active Mean`
+Đây là bộ feature ứng viên sau khi bỏ các cột định danh. Trong phiên bản v2, nhóm tiếp tục chọn 46 feature mà `live_sensor.py` có thể tính thống nhất với dữ liệu huấn luyện:
 
-Đây là các đặc trưng được dùng để mô hình học sự khác biệt giữa traffic bình thường và traffic DDoS.
+```python
+X = df[DDOS_FEATURES].copy()
+```
+
+Danh sách và thứ tự 46 feature được lưu trong `ddos_feature_manifest_v2.json`.
 
 ### Bước 4: Chuyển dữ liệu feature về dạng số
 
@@ -238,7 +247,7 @@ Nhờ `stratify=y`, tỷ lệ 3:1 giữa BENIGN và DDoS được giữ ổn đ�
 | Train | 120,000 | 40,000 | 160,000 |
 | Test | 30,000 | 10,000 | 40,000 |
 
-Như vậy, toàn bộ các mô hình Decision Tree, Random Forest và LightGBM đều được train và test trên cùng một bộ dữ liệu đã tiền xử lý, giúp kết quả đánh giá có tính so sánh trực tiếp.
+Như vậy, Random Forest và LightGBM v2 được train và test trên cùng một bộ dữ liệu 46 feature, giúp kết quả đánh giá có tính so sánh trực tiếp.
 
 ## 5. Chia train/test
 
@@ -260,19 +269,9 @@ Kết quả chia dữ liệu:
 
 ## 6. Các thuật toán huấn luyện
 
-Project tiến hành huấn luyện và so sánh 3 thuật toán:
+Phiên bản v2 tiến hành huấn luyện và so sánh 2 thuật toán:
 
-### 6.1. Decision Tree
-
-Decision Tree được sử dụng làm mô hình cơ sở. Mô hình này dễ hiểu, dễ giải thích và có tốc độ huấn luyện nhanh. Tuy nhiên, Decision Tree đơn lẻ có nguy cơ overfitting nếu cây quá sâu.
-
-Vai trò trong đồ án:
-
-```text
-Làm baseline để so sánh với các mô hình ensemble mạnh hơn.
-```
-
-### 6.2. Random Forest
+### 6.1. Random Forest
 
 Random Forest là mô hình ensemble gồm nhiều Decision Tree. Mô hình này giúp giảm overfitting và tăng độ ổn định so với một cây quyết định đơn lẻ.
 
@@ -284,7 +283,7 @@ Lý do phù hợp:
 - Dễ tích hợp vào Flask dashboard
 - Cho kết quả ổn định trên bài toán IDS
 
-### 6.3. LightGBM
+### 6.2. LightGBM
 
 LightGBM là thuật toán gradient boosting tối ưu cho dữ liệu dạng bảng và dữ liệu lớn. Mô hình này thường có tốc độ huấn luyện nhanh và độ chính xác cao.
 
@@ -304,88 +303,60 @@ BENIGN: 30,000
 DDoS: 10,000
 ```
 
-### 7.1. Decision Tree
+### 7.1. Random Forest v2
 
 | Chỉ số | Giá trị |
 |---|---:|
-| Train time | 4.5483 s |
-| Prediction time | 0.0167 s |
-| Accuracy | 0.999600 |
-| Precision DDoS | 0.999400 |
-| Recall DDoS | 0.999000 |
-| F1-score DDoS | 0.999200 |
-
-Confusion matrix:
-
-```text
-[[29994     6]
- [   10  9990]]
-```
-
-Diễn giải:
-
-- 29,994 mẫu BENIGN được dự đoán đúng
-- 6 mẫu BENIGN bị báo nhầm thành DDoS
-- 10 mẫu DDoS bị bỏ sót
-- 9,990 mẫu DDoS được phát hiện đúng
-
-### 7.2. Random Forest
-
-| Chỉ số | Giá trị |
-|---|---:|
-| Train time | 10.8622 s |
-| Prediction time | 0.1630 s |
-| Accuracy | 0.999675 |
-| Precision DDoS | 1.000000 |
-| Recall DDoS | 0.998700 |
-| F1-score DDoS | 0.999350 |
-
-Confusion matrix:
-
-```text
-[[30000     0]
- [   13  9987]]
-```
-
-Diễn giải:
-
-- 30,000 mẫu BENIGN được dự đoán đúng
-- 0 mẫu BENIGN bị báo nhầm thành DDoS
-- 13 mẫu DDoS bị bỏ sót
-- 9,987 mẫu DDoS được phát hiện đúng
-
-### 7.3. LightGBM
-
-| Chỉ số | Giá trị |
-|---|---:|
-| Train time | 7.3616 s |
-| Prediction time | 0.1830 s |
-| Accuracy | 0.999675 |
+| Train time | 17.8713 s |
+| Accuracy | 0.999450 |
 | Precision DDoS | 0.999800 |
-| Recall DDoS | 0.998900 |
-| F1-score DDoS | 0.999350 |
+| Recall DDoS | 0.998000 |
+| F1-score DDoS | 0.998899 |
 
 Confusion matrix:
 
 ```text
 [[29998     2]
- [   11  9989]]
+ [   20  9980]]
 ```
 
 Diễn giải:
 
 - 29,998 mẫu BENIGN được dự đoán đúng
 - 2 mẫu BENIGN bị báo nhầm thành DDoS
-- 11 mẫu DDoS bị bỏ sót
-- 9,989 mẫu DDoS được phát hiện đúng
+- 20 mẫu DDoS bị bỏ sót
+- 9,980 mẫu DDoS được phát hiện đúng
+
+### 7.2. LightGBM v2
+
+| Chỉ số | Giá trị |
+|---|---:|
+| Train time | 5.1420 s |
+| Accuracy | 0.999625 |
+| Precision DDoS | 0.999500 |
+| Recall DDoS | 0.999000 |
+| F1-score DDoS | 0.999250 |
+
+Confusion matrix:
+
+```text
+[[29995     5]
+ [   10  9990]]
+```
+
+Diễn giải:
+
+- 29,995 mẫu BENIGN được dự đoán đúng
+- 5 mẫu BENIGN bị báo nhầm thành DDoS
+- 10 mẫu DDoS bị bỏ sót
+- 9,990 mẫu DDoS được phát hiện đúng
 
 ## 8. Bảng so sánh tổng hợp
 
 | Model | Accuracy | Precision DDoS | Recall DDoS | F1-score DDoS | False Positive | False Negative | Train time | Prediction time |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Decision Tree | 0.999600 | 0.999400 | 0.999000 | 0.999200 | 6 | 10 | 4.5483 s | 0.0167 s |
-| Random Forest | 0.999675 | 1.000000 | 0.998700 | 0.999350 | 0 | 13 | 10.8622 s | 0.1630 s |
-| LightGBM | 0.999675 | 0.999800 | 0.998900 | 0.999350 | 2 | 11 | 7.3616 s | 0.1830 s |
+| Random Forest v2 | 0.999450 | 0.999800 | 0.998000 | 0.998899 | 2 | 20 | 17.8713 s | — |
+| LightGBM v2 | 0.999625 | 0.999500 | 0.999000 | 0.999250 | 5 | 10 | 5.1420 s | — |
 
 Trong bài toán IDS, các chỉ số cần quan tâm gồm:
 
@@ -397,42 +368,42 @@ Trong bài toán IDS, các chỉ số cần quan tâm gồm:
 
 ## 9. Nhận xét
 
-Cả ba mô hình đều đạt độ chính xác rất cao trên tập test. Random Forest và LightGBM có cùng accuracy là `0.999675`, cao hơn Decision Tree.
+Cả hai mô hình v2 đều đạt độ chính xác rất cao trên tập test. LightGBM v2 có Accuracy, Recall và F1-score cao hơn Random Forest v2.
 
-Random Forest có ưu điểm là không báo nhầm mẫu BENIGN nào thành DDoS trong tập test:
+Random Forest v2 có số false positive thấp hơn LightGBM v2:
 
 ```text
-False Positive = 0
+False Positive của Random Forest v2 = 2
+False Positive của LightGBM v2 = 5
 ```
 
 LightGBM có số mẫu DDoS bị bỏ sót ít hơn Random Forest:
 
 ```text
-False Negative của LightGBM = 11
-False Negative của Random Forest = 13
+False Negative của LightGBM v2 = 10
+False Negative của Random Forest v2 = 20
 ```
 
-Decision Tree có tốc độ dự đoán nhanh nhất, nhưng do là mô hình đơn lẻ nên khả năng tổng quát hóa kém ổn định hơn các mô hình ensemble.
+LightGBM v2 được ưu tiên khi cần giảm số DDoS bị bỏ sót; Random Forest v2 được giữ làm lựa chọn thay thế khi cần giảm false positive.
 
 ## 10. Lựa chọn mô hình cho dashboard
 
-Trong phạm vi project, **Random Forest** được đề xuất làm mô hình chính để tích hợp vào dashboard IDS realtime.
+Theo kết quả offline, **LightGBM v2** được ưu tiên khi cần giảm số DDoS bị bỏ sót. Runtime hiện đặt Random Forest v2 làm model mặc định và vẫn cho phép chọn LightGBM từ dashboard.
 
 Lý do:
 
-- Accuracy cao: `0.999675`
-- Không có false positive trên tập test
-- Dễ giải thích hơn LightGBM
-- Dễ lưu và nạp bằng `joblib`
-- Phù hợp với kiến trúc dashboard hiện tại của project
+- Recall DDoS cao hơn: `0.999000`
+- F1-score DDoS cao hơn: `0.999250`
+- Thời gian huấn luyện ngắn hơn trong lần thực nghiệm này
+- Đã được lưu cùng manifest 46 feature
 
-LightGBM được giữ làm mô hình so sánh vì có hiệu năng tốt và thời gian huấn luyện nhanh hơn Random Forest.
+Random Forest v2 vẫn được giữ trong dashboard để so sánh và là lựa chọn mặc định hiện tại khi cần giảm false positive.
 
 ## 11. Kết luận
 
 Qua quá trình tiền xử lý và huấn luyện, project đã tạo được tập dữ liệu 200,000 flow theo tỷ lệ 3:1 giữa BENIGN và DDoS. Lớp DDoS được lấy mẫu phân tầng theo từng nhóm tấn công để hạn chế lệch mẫu.
 
-Ba thuật toán Decision Tree, Random Forest và LightGBM đã được huấn luyện và đánh giá trên cùng một tập train/test. Kết quả cho thấy Random Forest và LightGBM đạt hiệu năng cao nhất, trong đó Random Forest được chọn làm mô hình chính cho hệ thống IDS realtime do tính ổn định, dễ tích hợp và kết quả false positive bằng 0 trên tập test.
+Hai thuật toán Random Forest và LightGBM v2 đã được huấn luyện và đánh giá trên cùng một tập train/test gồm 46 feature. LightGBM v2 có kết quả tốt hơn về Recall và F1-score; Random Forest v2 vẫn được giữ làm model mặc định và cả hai có thể chọn trong dashboard.
 
 
 

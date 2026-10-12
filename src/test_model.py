@@ -1,13 +1,14 @@
 from pathlib import Path
 
 import joblib
+import json
 import numpy as np
 import pandas as pd
 
 
-PROJECT_DIR = Path(r"D:\DoAn_IDS_DDoS")
-MODEL_PATH = PROJECT_DIR / "models" / "ddos_random_forest.joblib"
-FEATURE_COLUMNS_PATH = PROJECT_DIR / "models" / "feature_columns.joblib"
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = PROJECT_DIR / "models" / "ddos_v2" / "ddos_random_forest_v2.joblib"
+FEATURE_MANIFEST_PATH = PROJECT_DIR / "models" / "ddos_v2" / "ddos_feature_manifest_v2.json"
 CSV_PATH = PROJECT_DIR / "dataset" / "CSV-01-12" / "01-12" / "UDPLag.csv"
 
 DROP_COLUMNS = [
@@ -33,9 +34,9 @@ def preprocess(df: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
     df = df.drop(columns=[col for col in DROP_COLUMNS if col in df.columns], errors="ignore")
     df = df.drop(columns=["Label"], errors="ignore")
 
-    for column in feature_columns:
-        if column not in df.columns:
-            df[column] = 0
+    missing = [column for column in feature_columns if column not in df.columns]
+    if missing:
+        raise ValueError(f"Sample thieu feature: {missing}")
 
     x = df[feature_columns]
     x = x.apply(pd.to_numeric, errors="coerce")
@@ -46,7 +47,8 @@ def preprocess(df: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
 
 def main() -> None:
     model = joblib.load(MODEL_PATH)
-    feature_columns = joblib.load(FEATURE_COLUMNS_PATH)
+    manifest = json.loads(FEATURE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    feature_columns = manifest["features_in_order"]
 
     df = load_sample()
     x = preprocess(df, feature_columns)

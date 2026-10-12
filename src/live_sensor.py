@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import statistics
 import time
-from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import joblib
-from scapy.all import IP, TCP, UDP, sniff
+from scapy.all import IP, TCP, UDP, AsyncSniffer
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-FEATURE_COLUMNS_PATH = PROJECT_DIR / "models" / "feature_columns.joblib"
+FEATURE_MANIFEST_PATH = PROJECT_DIR / "models" / "ddos_v2" / "ddos_feature_manifest_v2.json"
 LIVE_FLOWS_PATH = PROJECT_DIR / "data" / "live_flows.csv"
 
 
@@ -24,6 +23,7 @@ class PacketStat:
     direction: str
     flags: int = 0
     window: int = 0
+    payload_length: int | None = None
 
 
 @dataclass
@@ -34,9 +34,25 @@ class FlowStat:
     destination_port: int
     protocol: int
     packets: list[PacketStat] = field(default_factory=list)
+    last_seen: float = 0.0
+    fin_directions: set[str] = field(default_factory=set)
+    rst_seen: bool = False
 
     def add_packet(self, packet_stat: PacketStat) -> None:
         self.packets.append(packet_stat)
+        self.last_seen = packet_stat.timestamp
+        if packet_stat.flags & 0x01:
+            self.fin_directions.add(packet_stat.direction)
+        if packet_stat.flags & 0x04:
+            self.rst_seen = True
+
+    @property
+    def is_ssh(self) -> bool:
+        return self.protocol == 6 and self.destination_port == 22
+
+    @property
+    def closed(self) -> bool:
+        return self.rst_seen or len(self.fin_directions) == 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,6 +62,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--attacker-ip", action="append", default=None, help="Attacker IP. Repeat for multiple attackers.")
     parser.add_argument("--attacker-ips", default="192.168.247.10", help="Comma-separated attacker IPs.")
     parser.add_argument("--window", type=float, default=2.0, help="Aggregation window in seconds.")
+    parser.add_argument(
+        "--ssh-idle-timeout",
+        type=float,
+        default=10.0,
+        help="Flush a TCP/22 flow after this many seconds without a packet.",
+    )
     parser.add_argument("--output", type=Path, default=LIVE_FLOWS_PATH, help="live_flows.csv output path.")
     parser.add_argument("--reset", action="store_true", help="Clear live_flows.csv before capture.")
     args = parser.parse_args()
@@ -55,6 +77,8 @@ def parse_args() -> argparse.Namespace:
     if args.attacker_ip:
         attacker_ips.extend(ip.strip() for ip in args.attacker_ip if ip.strip())
     args.attacker_ips = sorted(set(attacker_ips))
+    if args.window <= 0 or args.ssh_idle_timeout <= 0:
+        parser.error("--window and --ssh-idle-timeout must be positive")
     return args
 
 
@@ -112,9 +136,16 @@ def build_row(flow: FlowStat, feature_columns: list[str]) -> dict[str, float | i
     fwd_packets = [packet for packet in packets if packet.direction == "fwd"]
     bwd_packets = [packet for packet in packets if packet.direction == "bwd"]
 
-    lengths = [packet.length for packet in packets]
-    fwd_lengths = [packet.length for packet in fwd_packets]
-    bwd_lengths = [packet.length for packet in bwd_packets]
+    # CICFlowMeter's SSH packet-length fields include zero-length TCP packets.
+    # Keep the existing on-wire length calculation unchanged for DDoS flows.
+    def feature_length(packet: PacketStat) -> int:
+        if flow.is_ssh and packet.payload_length is not None:
+            return packet.payload_length
+        return packet.length
+
+    lengths = [feature_length(packet) for packet in packets]
+    fwd_lengths = [feature_length(packet) for packet in fwd_packets]
+    bwd_lengths = [feature_length(packet) for packet in bwd_packets]
     timestamps = [packet.timestamp for packet in packets]
     fwd_timestamps = [packet.timestamp for packet in fwd_packets]
     bwd_timestamps = [packet.timestamp for packet in bwd_packets]
@@ -195,7 +226,11 @@ def build_row(flow: FlowStat, feature_columns: list[str]) -> dict[str, float | i
         "Inbound": 1,
     }
 
-    row = {column: metrics.get(column, 0) for column in feature_columns}
+    missing = [column for column in feature_columns if column not in metrics]
+    if missing:
+        raise ValueError(f"Sensor khong tinh duoc feature: {missing}")
+
+    row = {column: metrics[column] for column in feature_columns}
     row.update(
         {
             "Source IP": flow.source_ip,
@@ -234,18 +269,37 @@ def flush_flows(flows: dict, feature_columns: list[str], output_path: Path) -> N
     flows.clear()
 
 
+def pop_ready_flows(
+    flows: dict[tuple[str, int, str, int, int], FlowStat],
+    now: float,
+    flush_non_ssh: bool,
+    ssh_idle_timeout: float,
+) -> dict[tuple[str, int, str, int, int], FlowStat]:
+    ready = {}
+    for key, flow in list(flows.items()):
+        if flow.is_ssh:
+            should_flush = flow.closed or now - flow.last_seen >= ssh_idle_timeout
+        else:
+            should_flush = flush_non_ssh
+        if should_flush:
+            ready[key] = flows.pop(key)
+    return ready
+
+
 def main() -> None:
+    from threading import Lock
+
     args = parse_args()
-    feature_columns = joblib.load(FEATURE_COLUMNS_PATH)
+    manifest = json.loads(FEATURE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    feature_columns = manifest["features_in_order"]
     flows: dict[tuple[str, int, str, int, int], FlowStat] = {}
+    flows_lock = Lock()
     last_flush = time.time()
 
     if args.reset:
         args.output.write_text("", encoding="utf-8")
 
     def handle_packet(packet) -> None:
-        nonlocal last_flush
-
         if IP not in packet:
             return
 
@@ -256,32 +310,50 @@ def main() -> None:
             return
 
         key = flow_key(packet, args.victim_ip)
-        if key not in flows:
-            flows[key] = FlowStat(*key)
-        flows[key].add_packet(
-            PacketStat(
-                timestamp=float(packet.time),
-                length=len(packet),
-                direction=packet_direction(packet, args.victim_ip),
-                flags=tcp_flags(packet),
-                window=tcp_window(packet),
+        with flows_lock:
+            if key not in flows:
+                flows[key] = FlowStat(*key)
+            flows[key].add_packet(
+                PacketStat(
+                    timestamp=float(packet.time),
+                    length=len(packet),
+                    direction=packet_direction(packet, args.victim_ip),
+                    flags=tcp_flags(packet),
+                    window=tcp_window(packet),
+                    payload_length=(
+                        len(bytes(packet[TCP].payload))
+                        if key[4] == 6 and key[3] == 22
+                        else None
+                    ),
+                )
             )
-        )
-
-        now = time.time()
-        if now - last_flush >= args.window:
-            flush_flows(flows, feature_columns, args.output)
-            last_flush = now
 
     print(f"Listening on {args.interface} for victim {args.victim_ip} and attackers {', '.join(args.attacker_ips)}")
     print(f"Writing realtime flows to {args.output}")
+    print(f"TCP/22: complete connection or {args.ssh_idle_timeout:g}s idle; other traffic: {args.window:g}s windows")
     print("Press Ctrl+C to stop.")
 
+    sniffer = AsyncSniffer(iface=args.interface, prn=handle_packet, store=False)
+    sniffer.start()
     try:
-        sniff(iface=args.interface, prn=handle_packet, store=False)
+        while True:
+            time.sleep(0.25)
+            now = time.time()
+            flush_non_ssh = now - last_flush >= args.window
+            with flows_lock:
+                ready = pop_ready_flows(flows, now, flush_non_ssh, args.ssh_idle_timeout)
+            flush_flows(ready, feature_columns, args.output)
+            if flush_non_ssh:
+                last_flush = now
     except KeyboardInterrupt:
-        flush_flows(flows, feature_columns, args.output)
         print("Stopped live sensor.")
+    finally:
+        if sniffer.running:
+            sniffer.stop()
+        with flows_lock:
+            remaining = dict(flows)
+            flows.clear()
+        flush_flows(remaining, feature_columns, args.output)
 
 
 if __name__ == "__main__":

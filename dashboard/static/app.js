@@ -1,13 +1,14 @@
 const pageCopy = {
-  overview: ["Realtime Detection Dashboard", "Live sensor mode: reading packets from IDS ens33."],
-  alerts: ["DDoS Alert Timeline", "Latest suspicious flows detected by the machine learning model."],
+  overview: ["DDoS & SSH Detection Dashboard", "Live sensor on IDS ens33: TCP/22 uses SSH detection; other flows use DDoS detection."],
+  alerts: ["IDS Alert Timeline", "Latest suspicious DDoS and SSH flows."],
   traffic: ["Traffic Analysis", "Batch-level classification from live sensor traffic."],
-  model: ["Model Runtime", "Random Forest and LightGBM models loaded from local joblib files."],
+  model: ["Model Runtime", "Random Forest and LightGBM for both DDoS and SSH."],
 };
 
 const statusEl = document.getElementById("system-status");
 const totalFlowsEl = document.getElementById("total-flows");
-const totalAttacksEl = document.getElementById("total-attacks");
+const totalDdosEl = document.getElementById("total-ddos");
+const totalSshEl = document.getElementById("total-ssh");
 const totalBenignEl = document.getElementById("total-benign");
 const attackRateEl = document.getElementById("attack-rate");
 const lastBatchEl = document.getElementById("last-batch");
@@ -63,7 +64,8 @@ function drawChart(canvas, history) {
 
   history.forEach((item, index) => {
     const x = padding + index * (barWidth + barGap);
-    const attackHeight = (item.attacks / maxValue) * chartHeight;
+    const ddosHeight = (item.ddos / maxValue) * chartHeight;
+    const sshHeight = (item.ssh / maxValue) * chartHeight;
     const benignHeight = (item.benign / maxValue) * chartHeight;
     const baseY = height - padding;
 
@@ -71,7 +73,9 @@ function drawChart(canvas, history) {
     ctx.fillRect(x, baseY - benignHeight, barWidth, benignHeight);
 
     ctx.fillStyle = "#c2410c";
-    ctx.fillRect(x, baseY - benignHeight - attackHeight, barWidth, attackHeight);
+    ctx.fillRect(x, baseY - benignHeight - ddosHeight, barWidth, ddosHeight);
+    ctx.fillStyle = "#7c3aed";
+    ctx.fillRect(x, baseY - benignHeight - ddosHeight - sshHeight, barWidth, sshHeight);
   });
 
   ctx.fillStyle = "#647086";
@@ -83,6 +87,10 @@ function drawChart(canvas, history) {
   ctx.fillText("DDoS", padding + 96, 24);
   ctx.fillStyle = "#c2410c";
   ctx.fillRect(padding + 144, 13, 12, 12);
+  ctx.fillStyle = "#647086";
+  ctx.fillText("SSH", padding + 180, 24);
+  ctx.fillStyle = "#7c3aed";
+  ctx.fillRect(padding + 218, 13, 12, 12);
 }
 
 function renderAlerts(alerts) {
@@ -182,7 +190,8 @@ async function refreshStats() {
   const data = await response.json();
 
   totalFlowsEl.textContent = data.total_flows.toLocaleString();
-  totalAttacksEl.textContent = data.total_attacks.toLocaleString();
+  totalDdosEl.textContent = data.total_ddos.toLocaleString();
+  totalSshEl.textContent = data.total_ssh.toLocaleString();
   totalBenignEl.textContent = data.total_benign.toLocaleString();
   attackRateEl.textContent = `${data.last_attack_rate}%`;
   lastBatchEl.textContent = `${data.last_batch.toLocaleString()} flows`;

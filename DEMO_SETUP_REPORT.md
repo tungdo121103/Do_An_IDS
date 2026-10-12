@@ -182,34 +182,59 @@ SLEEP_SECONDS=2
 | `CONCURRENCY=50` | Tối đa 50 request đồng thời |
 | `SLEEP_SECONDS=2` | Nghỉ 2 giây giữa các vòng |
 
-Script không tạo dữ liệu giả. Nó gọi ApacheBench `ab` để gửi HTTP request thật tới Victim Apache.
+Script không tạo dữ liệu giả. Nó gọi ApacheBench `ab` để gửi HTTP request thật tới Victim Apache. Khi sửa script, phải cập nhật **cùng bản file** trên cả Kali và Bot.
 
-Copy script sang Bot một lần từ Kali:
+Trên **Windows PowerShell**, trong thư mục project, chép bản mới sang Kali:
 
-```bash
-scp ~/attack_http_flood.sh bot@192.168.247.11:/home/bot/
-ssh bot@192.168.247.11 "chmod +x /home/bot/attack_http_flood.sh"
+```powershell
+cd D:\DoAn_IDS_DDoS
+scp .\tools\attack_http_flood.sh kali@192.168.247.10:/home/kali/
 ```
 
-Chạy local trên Kali:
+Trên **terminal Kali** (`kali@kali`), chép tiếp bản đó sang Bot, rồi chạy demo hai nguồn bằng **một lệnh cũng trên Kali**:
 
 ```bash
-./attack_http_flood.sh
+scp /home/kali/attack_http_flood.sh bot@192.168.247.11:/home/bot/
+bash /home/kali/attack_http_flood.sh --with-bot
 ```
 
-Chạy từ xa trên Bot:
+Không chạy lệnh demo này trên Bot hoặc Victim. Chế độ `--with-bot` tự khởi động script trên cả Kali và Bot; Kali cần SSH vào Bot bằng key không hỏi mật khẩu. Không thêm `--with-bot` vào lệnh chạy trên Bot.
+
+Script mặc định chạy tối đa 180 giây. Nhấn `Ctrl+C` trong terminal Kali đang chạy lệnh trên sẽ dừng cả hai và vòng `ab` đang chạy; không dùng lệnh `ssh ... & ./attack_http_flood.sh` cũ vì `Ctrl+C` có thể chỉ dừng Kali.
+
+## 6.1. Kịch bản chính: lưu lượng bình thường
+
+File script:
+
+```text
+tools/normal_traffic.sh
+```
+
+Script mô phỏng người dùng hợp lệ bằng cách gửi một HTTP request nhẹ tới Apache và một ping tới Victim mỗi 5 giây trong tối đa 180 giây. Script được chạy đồng thời trên Kali và Bot:
 
 ```bash
-ssh bot@192.168.247.11 "/home/bot/attack_http_flood.sh"
+ssh bot@192.168.247.11 "bash /home/bot/normal_traffic.sh" & bash /home/kali/normal_traffic.sh
 ```
 
-Chạy demo nhiều nguồn bằng một lệnh trên Kali:
+Kết quả kiểm thử v2 ghi nhận toàn bộ flow là `BENIGN` và `DDoS Flows = 0`. Đây là mốc đối chứng để kiểm tra false positive trước khi chạy HTTP Flood.
+
+## 6.2. Kịch bản mở rộng: SYN Flood và UDP Flood
+
+Hai script kiểm thử mở rộng là:
+
+```text
+tools/attack_syn_flood.sh
+tools/attack_udp_flood.sh
+```
+
+Các script gửi packet có giới hạn tới `192.168.247.20:80`, thời lượng tối đa 180 giây, 2.000 packet mỗi vòng và nghỉ 2 giây giữa các vòng. Chạy từ Kali để điều khiển cả hai nguồn:
 
 ```bash
-ssh bot@192.168.247.11 "/home/bot/attack_http_flood.sh" & ./attack_http_flood.sh
+ssh bot@192.168.247.11 "bash /home/bot/attack_syn_flood.sh" & bash /home/kali/attack_syn_flood.sh
+ssh bot@192.168.247.11 "bash /home/bot/attack_udp_flood.sh" & bash /home/kali/attack_udp_flood.sh
 ```
 
-Lệnh trên kích hoạt Bot tấn công Victim ở background, đồng thời Kali cũng chạy script local.
+Kết quả kiểm thử cho thấy hping3 gửi packet thật và IDS bắt được flow, nhưng model DDoS v2 hiện chưa phân loại ổn định các flow SYN/UDP realtime thành `DDoS`. Vì vậy SYN/UDP chỉ được dùng làm kiểm thử mở rộng, không phải kịch bản demo chính. Muốn hỗ trợ tốt hai dạng này cần bổ sung flow thu từ lab vào dữ liệu train và huấn luyện lại model.
 
 ## 7. Setup IDS Ubuntu Desktop
 
@@ -302,11 +327,16 @@ Thứ tự khi quay video/demo:
 8. Trên IDS chạy sensor multi-attacker.
 9. Trên IDS chạy dashboard.
 10. Trên dashboard chọn `Random Forest`, bấm `Reset`, sau đó bấm `Start`.
-11. Trên Kali chạy lệnh attack nhiều nguồn:
+11. Trên Kali chạy lưu lượng bình thường để lấy baseline:
     ```bash
-    ssh bot@192.168.247.11 "/home/bot/attack_http_flood.sh" & ./attack_http_flood.sh
+    ssh bot@192.168.247.11 "bash /home/bot/normal_traffic.sh" & bash /home/kali/normal_traffic.sh
     ```
-12. Quan sát dashboard hiển thị `DDoS Detected`, flow tăng và Recent Alerts có cả `.10` và `.11`.
+12. Bấm `Reset`, sau đó chạy HTTP Flood nhiều nguồn:
+    ```bash
+    bash /home/kali/attack_http_flood.sh --with-bot
+    ```
+13. Quan sát dashboard hiển thị `DDoS Detected`, flow tăng và Recent Alerts có cả `.10` và `.11`.
+14. SYN/UDP chỉ chạy khi cần kiểm thử mở rộng; không trộn chúng với phiên HTTP Flood.
 
 Luồng xử lý trong demo:
 
@@ -336,28 +366,28 @@ Dataset CIC-DDoS2019 dùng để train có dạng:
 Trong demo realtime:
 
 ```text
-request thật -> packet thật -> flow realtime -> 79 feature -> ML prediction
+request thật -> packet thật -> flow realtime -> 46 feature -> ML prediction
 ```
 
 `live_sensor.py` load danh sách feature từ:
 
 ```text
-models/feature_columns.joblib
+models/ddos_v2/ddos_feature_manifest_v2.json
 ```
 
 Số feature model sử dụng:
 
 ```text
-79 feature
+46 feature
 ```
 
 File `live_flows.csv` có cấu trúc:
 
 ```text
-Source IP, Source Port, Destination IP, Destination Port, 79 feature, Label
+Source IP, Source Port, Destination IP, Destination Port, 46 feature, Label
 ```
 
-Khi predict, các cột định danh như IP/port và `Label` không được đưa vào model. Model chỉ nhận đúng 79 feature đã dùng khi train.
+Khi predict, các cột định danh như IP/port và `Label` không được đưa vào model. Model chỉ nhận đúng 46 feature theo manifest đã dùng khi train.
 
 ## 10. Cấu hình dashboard realtime
 
@@ -381,7 +411,9 @@ Mỗi 2 giây dashboard xử lý tối đa 250 flow mới
 
 Nếu Kali/Bot tạo traffic nhanh hơn tốc độ dashboard đọc, `live_flows.csv` sẽ có backlog. Khi dừng attack, dashboard có thể tiếp tục cập nhật thêm một lúc để đọc nốt flow đã ghi trong file.
 
-## 11. Kết quả demo Random Forest nhiều nguồn
+## 11. Kết quả demo baseline trước khi chuyển sang model v2
+
+Các số liệu trong phần này được ghi nhận khi dashboard còn dùng model 79 feature. Chúng được giữ lại làm mốc tham chiếu; cần chạy lại demo VM với manifest 46 feature để ghi nhận kết quả v2.
 
 Kết quả chạy thử sau khi thêm Bot:
 
@@ -408,7 +440,7 @@ Nhận xét:
 - Random Forest cho tỷ lệ cảnh báo thấp-vừa phải, ổn định hơn cho demo chính.
 - Đây là mô phỏng DDoS ở tầng ứng dụng bằng HTTP flood từ nhiều nguồn.
 
-## 12. Kết quả chạy thử LightGBM
+## 12. Kết quả chạy thử LightGBM baseline
 
 Khi chuyển sang LightGBM, dashboard từng ghi nhận tỷ lệ DDoS cao hơn nhiều, ví dụ:
 
@@ -435,7 +467,7 @@ Nhận xét:
 | Victim chạy Apache2 | Đạt |
 | IDS bắt traffic thật trên interface mạng | Đạt |
 | Sensor sinh flow realtime | Đạt |
-| Model nhận đúng 79 feature | Đạt |
+| Code model/sensor dùng manifest 46 feature | Đã kiểm tra local |
 | Dashboard cập nhật realtime | Đạt |
 | Có cảnh báo DDoS và IP nguồn/đích | Đạt |
 | Có thể chọn Random Forest hoặc LightGBM | Đạt |
@@ -443,7 +475,7 @@ Nhận xét:
 Kết luận demo:
 
 ```text
-Hệ thống đã thử nghiệm thành công pipeline IDS realtime trong môi trường mạng VM lab. Kali attacker và Bot Ubuntu Server đồng thời tạo HTTP flood traffic thật tới Ubuntu Server victim chạy Apache2. IDS Ubuntu Desktop bắt traffic trên interface ens33, tổng hợp packet thành flow, trích xuất 79 đặc trưng tương thích với bộ feature huấn luyện, đưa vào mô hình Random Forest và hiển thị cảnh báo DDoS trên dashboard theo thời gian thực.
+Phiên bản v2 đã được train với 46 feature và tích hợp vào sensor/detector. Kịch bản demo chính gồm lưu lượng bình thường làm baseline và HTTP Flood từ Kali cùng Bot tới Apache2 của Victim; IDS tổng hợp packet thành flow, trích xuất 46 đặc trưng theo manifest v2 và hiển thị cảnh báo DDoS trên dashboard. SYN Flood và UDP Flood đã được tạo thành công trong mạng lab nhưng hiện là kiểm thử mở rộng vì model v2 chưa phát hiện ổn định hai dạng flow này.
 ```
 
 ## 14. Hạn chế và hướng phát triển
@@ -452,10 +484,11 @@ Hạn chế hiện tại:
 
 - Botnet trong demo là bot giả lập điều khiển qua SSH, không triển khai mã độc thật.
 - Số lượng nguồn tấn công hiện tại là 2 nguồn: Kali và 1 Bot.
-- Feature realtime được trích bằng Scapy, chưa hoàn toàn giống CICFlowMeter.
-- Một số feature phức tạp của CICFlowMeter có thể được xấp xỉ hoặc gán giá trị mặc định.
-- LightGBM cho tỷ lệ DDoS rất cao trên realtime traffic, cho thấy có hiện tượng lệch phân phối giữa dữ liệu train/test và dữ liệu realtime.
+- Feature realtime được trích bằng Scapy, nên vẫn cần kiểm chứng phân phối với CSV CIC-DDoS2019.
+- Các feature Active/Idle/Bulk và một số feature CICFlowMeter phức tạp đã được loại khỏi manifest v2 thay vì điền mặc định.
+- Kết quả LightGBM 84,4% ở phần trên thuộc baseline 79 feature; chưa dùng để kết luận cho model v2.
 - Dashboard đọc tối đa 250 flow mỗi 2 giây, nên khi traffic sinh quá nhanh có thể xuất hiện backlog.
+- Model v2 chưa thích nghi tốt với flow SYN/UDP do khác biệt phân bố feature giữa CIC-DDoS2019 và flow do sensor lab tự trích xuất.
 
 Hướng phát triển:
 
@@ -471,5 +504,5 @@ Hướng phát triển:
 Có thể trình bày như sau:
 
 ```text
-Trong demo này, hệ thống sử dụng nhiều nguồn tấn công gồm Kali attacker và một máy Bot Ubuntu Server. Bot không phải mã độc thật mà là máy giả lập botnet được Kali điều khiển qua SSH trong môi trường lab. Cả Kali và Bot đồng thời gửi HTTP request thật tới Ubuntu Server victim chạy Apache2. IDS Ubuntu Desktop bắt lưu lượng trên interface ens33, gom packet thành flow và trích xuất 79 đặc trưng thống kê tương thích với bộ feature đã huấn luyện từ CIC-DDoS2019. Các flow realtime được đưa vào mô hình Random Forest để phân loại BENIGN hoặc DDoS. Kết quả được lưu vào SQLite và hiển thị trên dashboard theo thời gian thực. Khi traffic bất thường xuất hiện, dashboard sinh cảnh báo DDoS Detected với địa chỉ nguồn 192.168.247.10 hoặc 192.168.247.11 và đích 192.168.247.20.
+Trong demo này, hệ thống sử dụng nhiều nguồn tấn công gồm Kali attacker và một máy Bot Ubuntu Server. Bot không phải mã độc thật mà là máy giả lập botnet được Kali điều khiển qua SSH trong môi trường lab. Cả Kali và Bot đồng thời gửi HTTP request thật tới Ubuntu Server victim chạy Apache2. IDS Ubuntu Desktop bắt lưu lượng trên interface ens33, gom packet thành flow và trích xuất 46 đặc trưng theo manifest v2 đã huấn luyện từ CIC-DDoS2019. Các flow realtime được đưa vào mô hình Random Forest hoặc LightGBM để phân loại BENIGN hoặc DDoS. Kết quả được lưu vào SQLite và hiển thị trên dashboard theo thời gian thực. Khi traffic bất thường xuất hiện, dashboard sinh cảnh báo DDoS Detected với địa chỉ nguồn 192.168.247.10 hoặc 192.168.247.11 và đích 192.168.247.20.
 ```
