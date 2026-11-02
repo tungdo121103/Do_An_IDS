@@ -1,5 +1,7 @@
 # Báo cáo huấn luyện mô hình IDS phát hiện DDoS
 
+> Báo cáo này lưu phương pháp và kết quả **offline** của nhánh DDoS. Pipeline hiện đã bắt traffic thật trong mạng VM và kết hợp thêm nhánh SSH; xem [runbook hiện hành](COMBINED_IDS_RUNBOOK.md) và [tài liệu hiểu đồ án ngày 19/10/2026](DEMO_DO_AN_2026-10-19.md). Không dùng chỉ số test dưới đây làm tỷ lệ phát hiện live.
+
 ## 1. Mục tiêu
 
 Mục tiêu của giai đoạn này là xây dựng và đánh giá các mô hình học máy để phân loại flow mạng thành hai nhóm:
@@ -7,7 +9,7 @@ Mục tiêu của giai đoạn này là xây dựng và đánh giá các mô hì
 - `BENIGN`: lưu lượng mạng bình thường
 - `DDoS`: lưu lượng có dấu hiệu tấn công từ chối dịch vụ phân tán
 
-Mô hình sau khi huấn luyện sẽ được xuất ra file `.joblib` và tích hợp vào dashboard IDS realtime của project.
+Mô hình sau khi huấn luyện đã được xuất ra file `.joblib` và tích hợp vào dashboard IDS realtime của project.
 
 ## 2. Bộ dữ liệu sử dụng
 

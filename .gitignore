@@ -17,3 +17,7 @@ dataset/
 # Runtime dashboard outputs
 data/ids_logs.db
 data/live_flows.csv
+
+# Local secrets and captured lab traffic
+VM_CREDENTIALS.md
+reports/**/*.csv

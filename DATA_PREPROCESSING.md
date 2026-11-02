@@ -5,7 +5,7 @@ Tài liệu này ghi lại các bước tiền xử lý đã thực hiện cho h
 1. Phát hiện DDoS.
 2. Phát hiện SSH Brute Force.
 
-Mục tiêu của tiền xử lý là tạo ra dữ liệu số, sạch, có nhãn rõ ràng và đặc biệt là bảo đảm **bộ feature khi train giống bộ feature do sensor realtime tạo ra**.
+Mục tiêu của tiền xử lý là tạo ra dữ liệu số, sạch, có nhãn rõ ràng và giữ **tên/thứ tự feature khi train khớp với schema do sensor realtime tạo ra**. Schema khớp chưa bảo đảm cách đo và phân bố giá trị giống nhau; đây vẫn là giới hạn cần kiểm tra bằng dữ liệu live.
 
 ## 1. Nguyên tắc chung
 
@@ -141,10 +141,10 @@ y: (200000,)
 
 ### 3.1. Dữ liệu đầu vào
 
-SSH sử dụng file:
+SSH sử dụng dữ liệu CICIDS2017 Tuesday-WorkingHours. Bản CSV gốc hiện có tại `dataset/Tuesday-WorkingHours.pcap_ISCX.csv`; script `src/prepare_ssh_dataset.py` mặc định tìm bản đã đặt trong `dataset/ssh/raw/` (có thể truyền `--input` nếu đặt nơi khác):
 
 ```text
-dataset/Tuesday-WorkingHours.pcap_ISCX.csv
+dataset/ssh/raw/Tuesday-WorkingHours.pcap_ISCX.csv
 ```
 
 File này nhỏ hơn nhiều so với bộ 19 file DDoS. Nó chứa khoảng 412 nghìn flow BENIGN và 3.219 flow `SSH-Patator`.
@@ -279,7 +279,7 @@ src/prepare_ssh_dataset.py
 src/prepare_ssh_train_ready.py
 ```
 
-Việc lưu manifest cùng model/dataset giúp sensor realtime, script test offline và model sử dụng đúng cùng một schema feature.
+Việc lưu manifest cùng model/dataset giúp sensor realtime, script test offline và model sử dụng đúng tên/thứ tự feature. Tuy nhiên bản train-ready và sensor live vẫn có thể khác ý nghĩa một số số đo, ví dụ độ dài TCP payload của SSH so với công cụ trích feature gốc. Cần đánh giá thêm trên flow lab có nhãn, không suy kết quả live từ độ chính xác offline.
 
 ## 6. Tóm tắt dùng trong báo cáo
 

@@ -85,7 +85,10 @@ nav {
   gap: 8px;
 }
 
-nav button {
+nav button,
+nav a {
+  display: flex;
+  align-items: center;
   height: 42px;
   border: 0;
   border-radius: 6px;
@@ -96,14 +99,17 @@ nav button {
   font-size: 0.96rem;
   font-weight: 500;
   cursor: pointer;
+  text-decoration: none;
 }
 
-nav button:hover {
+nav button:hover,
+nav a:hover {
   background: #f1f3f8;
   color: var(--primary);
 }
 
-nav button.active {
+nav button.active,
+nav a.active {
   background: var(--sidebar-active);
   color: var(--primary);
   font-weight: 600;
@@ -333,6 +339,49 @@ main {
   margin-bottom: 18px;
 }
 
+body[data-tab="ssh"] main > .metrics { display: none; }
+
+.ssh-metrics {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
+.second-grid { margin-top: 18px; }
+
+.ssh-signal {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 16px;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ssh-signal strong { font-size: 1rem; }
+.ssh-signal span { color: var(--muted); line-height: 1.4; }
+.ssh-signal.normal { border-left-color: #0f766e; background: var(--ok-bg); }
+.ssh-signal.notice { border-left-color: #d97706; background: #fffbeb; }
+.ssh-signal.danger { border-left-color: var(--danger); background: var(--danger-bg); }
+
+.ssh-source-list { display: grid; gap: 8px; }
+
+.ssh-source-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.ssh-source-row div { display: grid; gap: 4px; }
+.ssh-source-row small, .empty-state, .ssh-explanation { color: var(--muted); }
+.ssh-source-row > strong { white-space: nowrap; }
+.empty-state { margin: 0; padding: 18px 0; }
+.ssh-explanation { margin: 18px 0 0; line-height: 1.5; }
+
 article,
 .panel {
   border: 1px solid var(--line);
@@ -528,7 +577,13 @@ canvas {
   main { padding: 22px; }
   .metrics,
   .content-grid { grid-template-columns: 1fr; }
+  .ssh-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .table-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 540px) {
+  .ssh-metrics { grid-template-columns: 1fr; }
+  .ssh-source-row { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 720px) {

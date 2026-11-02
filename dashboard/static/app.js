@@ -1,5 +1,6 @@
 const pageCopy = {
   overview: ["DDoS & SSH Detection Dashboard", "Live sensor on IDS ens33: TCP/22 uses SSH detection; other flows use DDoS detection."],
+  ssh: ["SSH Login Monitoring", "Failed passwords come from the Victim log; SSH flow predictions come from the IDS model."],
   alerts: ["IDS Alert Timeline", "Latest suspicious DDoS and SSH flows."],
   traffic: ["Traffic Analysis", "Batch-level classification from live sensor traffic."],
   model: ["Model Runtime", "Random Forest and LightGBM for both DDoS and SSH."],
@@ -26,6 +27,19 @@ const modelDropdownLabel = document.getElementById("model-dropdown-label");
 const modelDropdownMenu = document.getElementById("model-dropdown-menu");
 const modelAlgorithmEl = document.getElementById("model-algorithm");
 const modelActiveEl = document.getElementById("model-active");
+const sshFailedTotalEl = document.getElementById("ssh-failed-total");
+const sshFailedRecentEl = document.getElementById("ssh-failed-recent");
+const sshFlowTotalEl = document.getElementById("ssh-flow-total");
+const sshMlTotalEl = document.getElementById("ssh-ml-total");
+const sshMlSummaryEl = document.getElementById("ssh-ml-summary");
+const sshModelNameEl = document.getElementById("ssh-model-name");
+const sshLastFailureEl = document.getElementById("ssh-last-failure");
+const sshLastAlertEl = document.getElementById("ssh-last-alert");
+const sshLogStatusEl = document.getElementById("ssh-log-status");
+const sshLogSignalEl = document.getElementById("ssh-log-signal");
+const sshLogSignalTitleEl = document.getElementById("ssh-log-signal-title");
+const sshLogSignalDetailEl = document.getElementById("ssh-log-signal-detail");
+const sshSourceListEl = document.getElementById("ssh-source-list");
 const startBtn = document.getElementById("start-btn");
 const pauseBtn = document.getElementById("pause-btn");
 const resetBtn = document.getElementById("reset-btn");
@@ -129,6 +143,7 @@ function renderAlerts(alerts) {
 }
 
 function switchTab(tabName) {
+  document.body.dataset.tab = tabName;
   document.querySelectorAll("nav button").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
@@ -139,6 +154,79 @@ function switchTab(tabName) {
   const [title, subtitle] = pageCopy[tabName];
   pageTitleEl.textContent = title;
   pageSubtitleEl.textContent = subtitle;
+}
+
+function formatEventTime(timestamp) {
+  return timestamp ? new Date(timestamp * 1000).toLocaleTimeString() : "No data";
+}
+
+function renderSsh(data) {
+  const auth = data.ssh_auth;
+  sshFailedTotalEl.textContent = auth.failed_passwords.toLocaleString();
+  sshFailedRecentEl.textContent = auth.recent_failed_passwords.toLocaleString();
+  sshFlowTotalEl.textContent = data.ssh_active_model.flows.toLocaleString();
+  sshMlTotalEl.textContent = data.ssh_active_model.attacks.toLocaleString();
+  sshMlSummaryEl.textContent = `${data.ssh_active_model.attacks.toLocaleString()} of ${data.ssh_active_model.flows.toLocaleString()} SSH flows`;
+  sshModelNameEl.textContent = data.active_model_label;
+  sshLastFailureEl.textContent = formatEventTime(auth.last_seen);
+  sshLastAlertEl.textContent = auth.last_log_alert ? formatEventTime(auth.last_log_alert.created_at) : "No alert";
+
+  let signalClass = "waiting";
+  let signalTitle = "Waiting for Victim SSH log";
+  let signalDetail = "Start the log agent on Victim before the SSH test.";
+  let logStatus = "Waiting";
+  if (!auth.enabled) {
+    signalTitle = "Victim log feed not configured";
+    signalDetail = "Set the same IDS_SSH_AUTH_TOKEN on IDS and Victim, then start the log agent.";
+    logStatus = "Not configured";
+  } else if (auth.log_alert) {
+    signalClass = "danger";
+    signalTitle = "Repeated SSH password failures in Victim log";
+    signalDetail = `At least ${auth.threshold} failures from one source in ${auth.window_seconds} seconds. ML flagged ${data.ssh_active_model.attacks} SSH flows.`;
+    logStatus = "Repeated failures";
+  } else if (auth.last_log_alert) {
+    signalClass = "notice";
+    signalTitle = "Repeated SSH failures recorded in Victim log";
+    signalDetail = `${auth.last_log_alert.source_ip} reached ${auth.last_log_alert.failed_passwords} failures in ${auth.last_log_alert.window_seconds} seconds at ${formatEventTime(auth.last_log_alert.created_at)}. ML flagged ${data.ssh_active_model.attacks} SSH flows.`;
+    logStatus = "Alert recorded";
+  } else if (auth.recent_failed_passwords > 0) {
+    signalClass = "notice";
+    signalTitle = "SSH password failures observed";
+    signalDetail = `${auth.recent_failed_passwords} failures in the last ${auth.window_seconds} seconds. Log signal is separate from ML prediction.`;
+    logStatus = "Failures observed";
+  } else if (auth.last_seen) {
+    signalClass = "normal";
+    signalTitle = "No recent SSH password failures";
+    signalDetail = `Last failed password received at ${formatEventTime(auth.last_seen)}. This does not confirm that the log agent is still running.`;
+    logStatus = "No recent failures";
+  }
+  sshLogSignalEl.className = `ssh-signal ${signalClass}`;
+  sshLogSignalTitleEl.textContent = signalTitle;
+  sshLogSignalDetailEl.textContent = signalDetail;
+  sshLogStatusEl.textContent = logStatus;
+
+  sshSourceListEl.replaceChildren();
+  if (!auth.sources.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No failed logins received yet.";
+    sshSourceListEl.append(empty);
+    return;
+  }
+  auth.sources.forEach((source) => {
+    const row = document.createElement("div");
+    row.className = "ssh-source-row";
+    const identity = document.createElement("div");
+    const ip = document.createElement("strong");
+    ip.textContent = source.ip;
+    const detail = document.createElement("small");
+    detail.textContent = `${source.connections} source ports · last ${formatEventTime(source.last_seen)}`;
+    identity.append(ip, detail);
+    const count = document.createElement("strong");
+    count.textContent = `${source.failures.toLocaleString()} failures`;
+    row.append(identity, count);
+    sshSourceListEl.append(row);
+  });
 }
 
 function updateControls(data) {
@@ -204,6 +292,7 @@ async function refreshStats() {
 
   chartCanvases.forEach((canvas) => drawChart(canvas, data.history));
   renderAlerts(data.alerts);
+  renderSsh(data);
   updateControls(data);
   updateModelPicker(data);
 }

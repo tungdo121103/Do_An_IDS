@@ -71,30 +71,50 @@ class FlowDetector:
         if DEFAULT_MODEL_KEY not in self.models:
             raise FileNotFoundError("Missing DDoS or SSH Random Forest model; copy both model families to models/")
 
-        self.active_model_key = DEFAULT_MODEL_KEY
+        self.active_model_keys = {"ddos": DEFAULT_MODEL_KEY, "ssh": DEFAULT_MODEL_KEY}
         self.live_offset = 0
         self.running = False
         self.finished = False
 
     @property
-    def active_model_label(self) -> str:
-        return MODEL_REGISTRY[self.active_model_key]["label"]
+    def active_model_key(self) -> str:
+        return self.active_model_keys["ddos"]
 
-    def available_models(self) -> list[dict]:
+    @active_model_key.setter
+    def active_model_key(self, value: str) -> None:
+        self.active_model_keys["ddos"] = value
+        self.active_model_keys["ssh"] = value
+
+    def model_key_for(self, attack_type: str) -> str:
+        return self.active_model_keys[attack_type]
+
+    def model_label_for(self, attack_type: str) -> str:
+        return MODEL_REGISTRY[self.model_key_for(attack_type)]["label"]
+
+    @property
+    def active_model_label(self) -> str:
+        return self.model_label_for("ddos")
+
+    def available_models(self, attack_type: str = "ddos") -> list[dict]:
         return [
             {
                 "key": key,
                 "label": config["label"],
-                "active": key == self.active_model_key,
+                "active": key == self.model_key_for(attack_type),
             }
             for key, config in MODEL_REGISTRY.items()
             if key in self.models
         ]
 
-    def set_model(self, model_key: str) -> None:
+    def set_model(self, model_key: str, attack_type: str | None = None) -> None:
         if model_key not in self.models:
             raise ValueError(f"Unknown or unloaded model: {model_key}")
-        self.active_model_key = model_key
+        if attack_type is None:
+            self.active_model_key = model_key
+        elif attack_type in self.active_model_keys:
+            self.active_model_keys[attack_type] = model_key
+        else:
+            raise ValueError(f"Unknown attack type: {attack_type}")
 
     def start(self) -> None:
         if not self.finished:
@@ -180,7 +200,7 @@ class FlowDetector:
         input_source: str,
         attack_type: str,
     ) -> None:
-        predictions = self.models[self.active_model_key][attack_type].predict(
+        predictions = self.models[self.model_key_for(attack_type)][attack_type].predict(
             self._preprocess(raw_df, attack_type)
         )
 
@@ -213,7 +233,7 @@ class FlowDetector:
                 time.strftime("%Y-%m-%d %H:%M:%S"),
                 batch_no,
                 input_source,
-                self.active_model_label,
+                self.model_label_for(attack_type),
                 attack_type,
                 batch_total,
                 attack_count,

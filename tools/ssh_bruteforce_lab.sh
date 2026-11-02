@@ -2,16 +2,24 @@
 set -euo pipefail
 
 # Bounded SSH login-attempt generator for the isolated IDS lab.
-# Usage: bash ssh_bruteforce_lab.sh <private-target-ip> <username> <password-list>
+# Usage: bash ssh_bruteforce_lab.sh <private-target-ip> <username> <password-list> [--rounds 1-5]
 
-if [[ $# -ne 3 ]]; then
-  echo "Usage: bash $0 <private-target-ip> <username> <password-list>" >&2
+if [[ $# -ne 3 && $# -ne 5 ]]; then
+  echo "Usage: bash $0 <private-target-ip> <username> <password-list> [--rounds 1-5]" >&2
   exit 2
 fi
 
 target=$1
 username=$2
 password_list=$3
+rounds=3
+if [[ $# -eq 5 ]]; then
+  if [[ $4 != "--rounds" || ! $5 =~ ^[1-5]$ ]]; then
+    echo "--rounds must be an integer from 1 to 5." >&2
+    exit 2
+  fi
+  rounds=$5
+fi
 
 if [[ ! $target =~ ^(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)$ ]]; then
   echo "Only private IPv4 lab targets are allowed." >&2
@@ -42,5 +50,14 @@ if (( attempts < 1 || attempts > 50 )); then
   exit 2
 fi
 
-echo "Testing up to $attempts SSH logins against $target:22 as $username (2 parallel tasks)."
-hydra -l "$username" -P "$password_list" -t 2 -s 22 -W 3 -f "ssh://$target"
+echo "Testing up to $attempts SSH logins per round against $target:22 as $username (2 parallel tasks, $rounds rounds)."
+echo "Maximum planned password attempts: $((attempts * rounds)). Press Ctrl+C to stop."
+
+for ((round = 1; round <= rounds; round++)); do
+  echo "[*] SSH round $round/$rounds"
+  hydra -l "$username" -P "$password_list" -t 2 -s 22 -W 3 -f "ssh://$target"
+  if (( round < rounds )); then
+    echo "[*] Waiting 12 seconds for the IDS to finish SSH flows before the next round."
+    sleep 12
+  fi
+done

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ 'SSH Login Monitoring' if attack_type == 'ssh' else 'DDoS Detection Dashboard' }} · IDS Monitor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-attack-type="{{ attack_type }}">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">IDS</span><div><h1>IDS Monitor</h1><p>Machine Learning Realtime IDS</p></div></div>
+    <nav aria-label="Detection pages">
+      <a href="{{ url_for('ddos_page') }}" class="{{ 'active' if attack_type == 'ddos' else '' }}">DDoS</a>
+      <a href="{{ url_for('ssh_page') }}" class="{{ 'active' if attack_type == 'ssh' else '' }}">SSH</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="topbar">
+      <div>
+        {% if attack_type == 'ssh' %}
+        <h2>SSH Login Monitoring</h2><p>Victim log records failed passwords; the IDS model classifies TCP/22 connections.</p>
+        {% else %}
+        <h2>DDoS Detection Dashboard</h2><p>Live traffic from IDS ens33; DDoS predictions from the selected model.</p>
+        {% endif %}
+      </div>
+      <div class="topbar-actions">
+        <div class="model-picker" id="model-picker">
+          <span>{{ 'SSH model' if attack_type == 'ssh' else 'DDoS model' }}</span>
+          <button id="model-dropdown-button" class="model-dropdown-button" type="button" aria-haspopup="listbox" aria-expanded="false"><span id="model-dropdown-label">Random Forest</span></button>
+          <div id="model-dropdown-menu" class="model-dropdown-menu" role="listbox"></div>
+        </div>
+        <button id="start-btn" class="control primary" type="button" title="Start the shared IDS flow reader">Start IDS</button>
+        <button id="pause-btn" class="control" type="button" title="Pause the shared IDS flow reader">Pause IDS</button>
+        <button id="reset-btn" class="control danger" type="button" title="Clear results for this model on this page">Reset</button>
+        <div id="system-status" class="status normal">Paused</div>
+      </div>
+    </header>
+
+    {% if attack_type == 'ddos' %}
+    <section class="metrics" aria-label="DDoS metrics">
+      <article><span>DDoS traffic flows</span><strong id="total-flows">0</strong></article>
+      <article><span>Flows flagged as DDoS</span><strong id="total-attacks">0</strong></article>
+      <article><span>Benign flows</span><strong id="total-benign">0</strong></article>
+      <article><span>Flagged flows / total</span><strong id="flagged-rate">0%</strong></article>
+      <article><span>Last batch DDoS rate</span><strong id="last-rate">0%</strong></article>
+    </section>
+    <section class="content-grid">
+      <div class="panel chart-panel"><div class="panel-title"><h3>DDoS traffic classification</h3><span>updates every 2s</span></div><canvas id="traffic-chart" width="900" height="320"></canvas></div>
+      <div class="panel"><div class="panel-title"><h3>DDoS model alerts</h3><span id="last-batch">0 flows in last batch</span></div><div id="alerts" class="alerts"></div></div>
+    </section>
+    {% else %}
+    <div class="ssh-signal waiting" id="ssh-log-signal" aria-live="polite"><strong id="ssh-log-signal-title">Waiting for Victim SSH log</strong><span id="ssh-log-signal-detail">Start the log agent on Victim before the SSH test.</span></div>
+    <section class="metrics ssh-metrics" aria-label="SSH metrics">
+      <article><span>Failed passwords (Victim log)</span><strong id="ssh-failed-total">0</strong></article>
+      <article><span>Failed in last 60 seconds</span><strong id="ssh-failed-recent">0</strong></article>
+      <article><span>SSH TCP flows (IDS)</span><strong id="ssh-flow-total">0</strong></article>
+      <article><span>Flows flagged by ML</span><strong id="ssh-ml-total">0</strong></article>
+      <article><span>ML flagged / SSH flows</span><strong id="ssh-ml-rate">0%</strong></article>
+    </section>
+    <div class="content-grid">
+      <div class="panel chart-panel"><div class="panel-title"><h3>Failed passwords over time</h3><span>Victim log · 10s buckets</span></div><canvas id="ssh-log-chart" width="900" height="250"></canvas></div>
+      <div class="panel"><div class="panel-title"><h3>Failed logins by source</h3><span>Victim log</span></div><div id="ssh-source-list" class="ssh-source-list"><p class="empty-state">No failed logins received yet.</p></div></div>
+    </div>
+    <div class="content-grid second-grid">
+      <div class="panel chart-panel"><div class="panel-title"><h3>SSH connection classification</h3><span id="ssh-model-name">Random Forest</span></div><canvas id="traffic-chart" width="900" height="250"></canvas></div>
+      <div class="panel"><div class="panel-title"><h3>SSH evidence</h3><span>two separate signals</span></div><div class="detail-list">
+        <div><span>Model flagged</span><strong id="ssh-ml-summary">0 of 0 SSH flows</strong></div>
+        <div><span>Last failed password</span><strong id="ssh-last-failure">No data</strong></div>
+        <div><span>Last log alert</span><strong id="ssh-last-alert">No alert</strong></div>
+        <div><span>Log signal</span><strong id="ssh-log-status">Waiting</strong></div>
+      </div><p class="ssh-explanation">Failed passwords come from the Victim log. ML predictions come from IDS network flows. The flagged percentage is a share of observed SSH flows, not model accuracy.</p></div>
+    </div>
+    <section class="panel wide-panel second-grid"><div class="panel-title"><h3>SSH model alerts</h3><span id="last-batch">0 flows in last batch</span></div><div id="alerts" class="alerts"></div></section>
+    {% endif %}
+  </main>
+  <script src="{{ url_for('static', filename='detector.js') }}"></script>
+</body>
+</html>
