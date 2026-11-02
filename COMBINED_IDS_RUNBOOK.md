@@ -145,10 +145,10 @@ Sau đó trên **terminal Kali** (`kali@kali`), không phải Bot hoặc Victim:
 
 ```bash
 scp /home/kali/attack_http_flood.sh bot@192.168.247.11:/home/bot/
-bash /home/kali/attack_http_flood.sh --with-bot
+DURATION_SECONDS=60 bash /home/kali/attack_http_flood.sh --with-bot
 ```
 
-Lệnh thứ nhất cập nhật Bot; lệnh thứ hai khởi động cả Kali và Bot. Script mặc định chạy tối đa 180 giây, mỗi vòng 2.000 request, concurrency 50, nghỉ 2 giây; `Ctrl+C` trong terminal Kali sẽ dừng cả hai phía. Cần SSH key từ Kali sang Bot. Không dùng lệnh `ssh bot ... & bash ...` cũ vì tiến trình Bot có thể tiếp tục chạy nền.
+Lệnh thứ nhất cập nhật Bot; lệnh thứ hai khởi động cả Kali và Bot. Script mặc định chạy tối đa 60 giây, mỗi vòng 2.000 request, concurrency 50, nghỉ 2 giây; giới hạn cứng sẽ dừng lượt `ab` đang chạy khi hết giờ và `Ctrl+C` trong terminal Kali có thể dừng sớm cả hai phía. Cần SSH key từ Kali sang Bot. Không dùng lệnh `ssh bot ... & bash ...` cũ vì tiến trình Bot có thể tiếp tục chạy nền.
 
 ## Kiểm tra kết quả
 

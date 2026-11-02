@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-DURATION_SECONDS="${DURATION_SECONDS:-180}"
+DURATION_SECONDS="${DURATION_SECONDS:-60}"
 REQUESTS_PER_ROUND="${REQUESTS_PER_ROUND:-2000}"
 CONCURRENCY="${CONCURRENCY:-50}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-2}"
@@ -130,6 +130,11 @@ if ! command -v ab >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v timeout >/dev/null 2>&1; then
+  echo "[!] GNU timeout is required (normally provided by coreutils)."
+  exit 1
+fi
+
 if [ "$CONCURRENCY" -gt "$REQUESTS_PER_ROUND" ]; then
   echo "[!] CONCURRENCY must be less than or equal to REQUESTS_PER_ROUND."
   exit 1
@@ -155,12 +160,17 @@ while [ "$SECONDS" -lt "$END_TIME" ]; do
   echo
   echo "[*] Round $ROUND | remaining ${REMAINING}s"
 
-  ab -n "$REQUESTS_PER_ROUND" -c "$CONCURRENCY" "$TARGET" &
+  # Enforce the session deadline even when one ApacheBench round is slow.
+  timeout --signal=TERM --kill-after=2s "${REMAINING}s" \
+    ab -n "$REQUESTS_PER_ROUND" -c "$CONCURRENCY" "$TARGET" &
   AB_PID=$!
   wait "$AB_PID"
   EXIT_CODE=$?
   AB_PID=""
-  if [ "$EXIT_CODE" -ne 0 ]; then
+  if [ "$EXIT_CODE" -eq 124 ] || [ "$EXIT_CODE" -eq 137 ]; then
+    echo "[*] Reached the ${DURATION_SECONDS}s hard limit; current ab round was stopped."
+    break
+  elif [ "$EXIT_CODE" -ne 0 ]; then
     echo "[!] ab exited with code $EXIT_CODE"
   fi
 

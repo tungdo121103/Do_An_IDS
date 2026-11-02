@@ -170,10 +170,10 @@ ssh -o BatchMode=yes bot@192.168.247.11 hostname
 Trên trang DDoS chọn model, bấm Reset rồi Start IDS. Trên Kali chạy:
 
 ```bash
-bash /home/kali/attack_http_flood.sh --with-bot
+DURATION_SECONDS=60 bash /home/kali/attack_http_flood.sh --with-bot
 ```
 
-`Ctrl+C` trên Kali sẽ yêu cầu dừng cả tiến trình Kali và Bot. Chỉ chạy trong mạng lab được phép.
+Script tự dừng cứng sau 60 giây trên cả Kali và Bot, kể cả khi một vòng `ab` đang chạy chậm. `Ctrl+C` trên Kali vẫn có thể dừng sớm cả hai tiến trình. Sau khi script kết thúc, chờ số liệu dashboard ổn định khoảng 10–15 giây rồi mới Reset và chuyển model vì sensor có thể còn hoàn tất các flow đã thu. Chỉ chạy trong mạng lab được phép.
 
 ## 9. Kiểm tra nhanh khi không có dữ liệu
 
