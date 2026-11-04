@@ -58,11 +58,11 @@
       <article><span>ML flagged / SSH flows</span><strong id="ssh-ml-rate">0%</strong></article>
     </section>
     <div class="content-grid">
-      <div class="panel chart-panel"><div class="panel-title"><h3>Failed passwords over time</h3><span>Victim log · 10s buckets</span></div><canvas id="ssh-log-chart" width="900" height="250"></canvas></div>
-      <div class="panel"><div class="panel-title"><h3>Failed logins by source</h3><span>Victim log</span></div><div id="ssh-source-list" class="ssh-source-list"><p class="empty-state">No failed logins received yet.</p></div></div>
+      <div class="panel chart-panel"><div class="panel-title"><h3>Failed passwords over time</h3><span>Each bar = failed attempts in one 10-second window</span></div><canvas id="ssh-log-chart" width="900" height="250"></canvas></div>
+      <div class="panel"><div class="panel-title"><h3>SSH model alerts</h3><span id="last-batch">0 flows in last batch</span></div><div id="alerts" class="alerts"></div></div>
     </div>
     <div class="content-grid second-grid">
-      <div class="panel chart-panel"><div class="panel-title"><h3>SSH connection classification</h3><span id="ssh-model-name">Random Forest</span></div><canvas id="traffic-chart" width="900" height="250"></canvas></div>
+      <div class="panel chart-panel"><div class="panel-title"><h3>SSH connection classification</h3><span><span id="ssh-model-name">Random Forest</span> · each bar = flows in one processed batch</span></div><canvas id="traffic-chart" width="900" height="250"></canvas></div>
       <div class="panel"><div class="panel-title"><h3>SSH evidence</h3><span>two separate signals</span></div><div class="detail-list">
         <div><span>Model flagged</span><strong id="ssh-ml-summary">0 of 0 SSH flows</strong></div>
         <div><span>Last failed password</span><strong id="ssh-last-failure">No data</strong></div>
@@ -70,7 +70,6 @@
         <div><span>Log signal</span><strong id="ssh-log-status">Waiting</strong></div>
       </div><p class="ssh-explanation">Failed passwords come from the Victim log. ML predictions come from IDS network flows. The flagged percentage is a share of observed SSH flows, not model accuracy.</p></div>
     </div>
-    <section class="panel wide-panel second-grid"><div class="panel-title"><h3>SSH model alerts</h3><span id="last-batch">0 flows in last batch</span></div><div id="alerts" class="alerts"></div></section>
     {% endif %}
   </main>
   <script src="{{ url_for('static', filename='detector.js') }}"></script>

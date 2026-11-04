@@ -148,9 +148,24 @@ class FlowDetector:
 
     def _read_live_batch(self) -> pd.DataFrame | None:
         if not LIVE_FLOWS_PATH.exists() or LIVE_FLOWS_PATH.stat().st_size == 0:
+            # The live sensor may be restarted with a fresh output file while
+            # the dashboard process keeps running. The old offset is invalid
+            # for that new file and must not hide its first SSH flows.
+            self.live_offset = 0
             return None
 
-        df = pd.read_csv(LIVE_FLOWS_PATH, low_memory=False)
+        try:
+            df = pd.read_csv(LIVE_FLOWS_PATH, low_memory=False)
+        except pd.errors.EmptyDataError:
+            # The sensor can truncate and rewrite the file between stat() and
+            # read_csv(). Treat that short race exactly like an empty file.
+            self.live_offset = 0
+            return None
+
+        if self.live_offset > len(df):
+            # File was replaced/truncated. Start at row zero of the new capture
+            # instead of waiting for it to grow beyond the previous run.
+            self.live_offset = 0
         if self.live_offset >= len(df):
             return None
 

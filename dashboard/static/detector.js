@@ -9,17 +9,22 @@ function drawBars(canvas, values, label, color) {
   const ctx = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
-  const left = 40;
+  const left = 55;
   const top = 40;
-  const bottom = height - 30;
+  const bottom = height - 36;
   const plotHeight = bottom - top;
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = "#e2e8f0";
   ctx.fillStyle = "#647086";
-  ctx.font = "14px sans-serif";
-  for (let i = 0; i <= 4; i++) {
-    const y = bottom - plotHeight * i / 4;
+  ctx.font = "12px sans-serif";
+  const max = Math.max(1, ...values.map((item) => item.value));
+  const gridSteps = Math.min(4, Math.max(1, Math.ceil(max)));
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = bottom - plotHeight * i / gridSteps;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - 20, y); ctx.stroke();
+    ctx.fillStyle = "#647086";
+    const tick = max * i / gridSteps;
+    ctx.fillText(Number.isInteger(tick) ? String(tick) : tick.toFixed(1), 5, y + 4);
   }
   ctx.fillStyle = color;
   ctx.fillRect(left, 10, 12, 12);
@@ -29,12 +34,19 @@ function drawBars(canvas, values, label, color) {
     ctx.fillText("No data yet", left, top + 25);
     return;
   }
-  const max = Math.max(1, ...values.map((item) => item.value));
   const slot = (width - left - 20) / values.length;
   values.forEach((item, index) => {
     const barHeight = item.value / max * plotHeight;
     ctx.fillStyle = color;
     ctx.fillRect(left + index * slot + 2, bottom - barHeight, Math.max(2, slot - 4), barHeight);
+  });
+  const labelIndexes = [...new Set([0, Math.floor((values.length - 1) / 2), values.length - 1])];
+  ctx.fillStyle = "#647086";
+  labelIndexes.forEach((index) => {
+    const item = values[index];
+    if (!item?.label) return;
+    const x = left + index * slot + slot / 2;
+    ctx.fillText(item.label, Math.max(left, Math.min(width - 70, x - 28)), height - 10);
   });
 }
 
@@ -43,13 +55,24 @@ function drawClassification(history) {
   const ctx = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
-  const left = 40, top = 42, bottom = height - 30;
+  const showNumericScale = attackType === "ssh";
+  const left = showNumericScale ? 55 : 40;
+  const top = 42;
+  const bottom = height - (showNumericScale ? 36 : 30);
   const plotHeight = bottom - top;
   ctx.clearRect(0, 0, width, height);
   ctx.strokeStyle = "#e2e8f0";
-  for (let i = 0; i <= 4; i++) {
-    const y = bottom - plotHeight * i / 4;
+  const max = Math.max(1, ...history.map((row) => row.flows));
+  ctx.font = "12px sans-serif";
+  const gridSteps = showNumericScale ? Math.min(4, Math.max(1, Math.ceil(max))) : 4;
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = bottom - plotHeight * i / gridSteps;
     ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - 20, y); ctx.stroke();
+    if (showNumericScale) {
+      ctx.fillStyle = "#647086";
+      const tick = max * i / gridSteps;
+      ctx.fillText(Number.isInteger(tick) ? String(tick) : tick.toFixed(1), 5, y + 4);
+    }
   }
   const attackLabel = attackType === "ssh" ? "Flagged SSH" : "Flagged DDoS";
   const attackColor = attackType === "ssh" ? "#7c3aed" : "#c2410c";
@@ -59,7 +82,6 @@ function drawClassification(history) {
   ctx.fillStyle = attackColor; ctx.fillRect(left + 93, 10, 12, 12);
   ctx.fillStyle = "#647086"; ctx.fillText(attackLabel, left + 111, 21);
   if (!history.length) { ctx.fillText("No flows yet", left, top + 25); return; }
-  const max = Math.max(1, ...history.map((row) => row.flows));
   const slot = (width - left - 20) / history.length;
   history.forEach((row, index) => {
     const x = left + index * slot + 2;
@@ -110,7 +132,12 @@ function renderSsh(data) {
   el("ssh-model-name").textContent = data.active_model_label;
   el("ssh-last-failure").textContent = clock(auth.last_seen);
   el("ssh-last-alert").textContent = auth.last_log_alert ? clock(auth.last_log_alert.created_at) : "No log alert";
-  drawBars(el("ssh-log-chart"), auth.timeline.map((row) => ({value: row.failures})), "Failed passwords", "#ea580c");
+  drawBars(
+    el("ssh-log-chart"),
+    auth.timeline.map((row) => ({value: row.failures, label: clock(row.bucket)})),
+    "Failed passwords per 10 seconds",
+    "#ea580c"
+  );
 
   let signal = "waiting", title = "Waiting for Victim SSH log";
   let detail = "Start the log agent on Victim before the SSH test.";
@@ -141,21 +168,6 @@ function renderSsh(data) {
   el("ssh-log-signal-detail").textContent = detail;
   el("ssh-log-status").textContent = status;
 
-  const sources = el("ssh-source-list");
-  sources.replaceChildren();
-  if (!auth.sources.length) {
-    const empty = document.createElement("p"); empty.className = "empty-state";
-    empty.textContent = "No failed logins received yet."; sources.append(empty);
-  }
-  auth.sources.forEach((source) => {
-    const row = document.createElement("div"); row.className = "ssh-source-row";
-    const identity = document.createElement("div");
-    const ip = document.createElement("strong"); ip.textContent = source.ip;
-    const note = document.createElement("small"); note.textContent = `${source.connections} source ports · last ${clock(source.last_seen)}`;
-    identity.append(ip, note);
-    const failures = document.createElement("strong"); failures.textContent = `${fmt(source.failures)} failures`;
-    row.append(identity, failures); sources.append(row);
-  });
 }
 
 function updateModelPicker(data) {

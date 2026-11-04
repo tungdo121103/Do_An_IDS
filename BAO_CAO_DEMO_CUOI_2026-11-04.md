@@ -1,6 +1,6 @@
-# Biên bản demo IDS cuối trước giai đoạn viết báo cáo — DDoS 27/10, SSH 02/11/2026
+# Biên bản demo IDS cuối trước giai đoạn viết báo cáo — DDoS 27/10, SSH đến 04/11/2026
 
-> Trạng thái: đã ghi hai ảnh DDoS ngày 27/10 và ba ảnh SSH ngày 02/11/2026. Đường gửi log từ Victim trong phiên SSH cuối còn cần kiểm tra. Các số dưới đây là số hiển thị trên dashboard, không phải nhãn đúng của từng flow.
+> Trạng thái: đã ghi hai ảnh DDoS ngày 27/10, các ảnh SSH ngày 02/11 và hai ảnh xác nhận SSH Random Forest/LightGBM ngày 04/11/2026. Đường gửi log từ Victim đã hoạt động trong phiên 04/11. Các số dưới đây là số hiển thị trên dashboard, không phải nhãn đúng của từng flow.
 
 ## 1. Mục đích và phạm vi
 
@@ -19,7 +19,7 @@ Sensor `src/live_sensor.py` bắt gói giữa các nguồn đã khai báo và Vi
 
 ## 3. Kịch bản HTTP flood/DDoS
 
-Trên Kali chạy `bash /home/kali/attack_http_flood.sh --with-bot`. Script điều khiển cả Kali và Bot gửi HTTP request tới Apache2 trên Victim. Cấu hình mặc định của mỗi máy là tối đa **180 giây**, **2.000 request mỗi vòng**, **50 kết nối đồng thời** và nghỉ **2 giây** giữa các vòng. `Ctrl+C` ở Kali dừng phiên trên cả hai máy. Đây là bài **HTTP flood hai nguồn trong lab**; nó minh họa đặc điểm nhiều nguồn của DDoS, không phải botnet thật hoặc phép thử khả năng chịu tải Internet của Victim.
+Trên Kali chạy `bash /home/kali/attack_http_flood.sh --with-bot`. Script điều khiển cả Kali và Bot gửi HTTP request tới Apache2 trên Victim. Cấu hình hiện tại của mỗi máy là tối đa **60 giây**, **2.000 request mỗi vòng**, **50 kết nối đồng thời** và nghỉ **2 giây** giữa các vòng. `Ctrl+C` ở Kali dừng phiên trên cả hai máy; cơ chế timeout cũng dừng tiến trình khi đủ thời lượng. Đây là bài **HTTP flood hai nguồn trong lab**; nó minh họa đặc điểm nhiều nguồn của DDoS, không phải botnet thật hoặc phép thử khả năng chịu tải Internet của Victim.
 
 Model DDoS dự đoán từng **flow** dựa trên 46 đặc trưng. IP nguồn và cổng đích được dùng để định tuyến/hiển thị, không phải số lượng máy tham gia được đưa trực tiếp vào dự đoán. Vì vậy tăng số nguồn không tự bảo đảm tỷ lệ phát hiện tăng hoặc giống lần demo này. Nếu model đánh dấu ít nhất một flow DDoS trong một lô, dashboard ghi cảnh báo cho lô đó; mức `HIGH` khi ít nhất 70% flow trong lô/nhánh đó bị đánh dấu, còn có dương tính nhưng dưới ngưỡng này là `MEDIUM`. Đây là mức cảnh báo theo **tỷ lệ dự đoán trong lô**, không phải đánh giá chắc chắn rằng Victim đã mất khả năng phục vụ.
 
@@ -90,9 +90,9 @@ Tab SSH có hai tín hiệu **riêng**: kết quả model trên flow, và số d
 
 `100%` và mức `HIGH` của Random Forest áp dụng cho **lô cuối chỉ có 1 flow, và flow đó bị đánh dấu**. Chúng không có nghĩa model nhận diện đúng 100% của 12 flow trong toàn phiên; thực tế tab SSH ghi rõ `1 of 12 SSH flows`. `2 flows` trong ô Recent Alerts của ảnh LightGBM là kích thước lô gần nhất, không phải 2 cảnh báo. Hai ảnh của hai model có tổng flow khác nhau nên đây là hai ảnh quan sát, không phải phép so sánh độ chính xác trên cùng một tập flow có nhãn chuẩn.
 
-Tab SSH Random Forest đang hiển thị `Failed passwords (Victim log) = 0`, `Waiting for Victim SSH log`, `No failed logins received yet`. Vì vậy **chưa có bằng chứng log agent đã gửi thành công sự kiện từ Victim tới IDS** trong phiên này. Không thể dùng ảnh để kết luận có bao nhiêu lần thử mật khẩu thất bại, hay nói rằng cảnh báo log đã hoạt động. Cần kiểm tra terminal `ssh_auth_agent.py` trên Victim: agent phải khởi động trước Hydra, không báo `HTTP 401`, và in dòng `Failed SSH password from ...` sau khi có log mới. Nếu journal trên Victim có dòng `Failed password` nhưng agent không in gì, phải kiểm tra đường đọc journal; nếu agent báo `HTTP 401`, kiểm tra token ở IDS/Victim. Sau khi sửa đường log, chạy lại bài thử và lưu ảnh tab SSH.
+Trong ảnh ngày 02/11, tab SSH Random Forest còn hiển thị `Failed passwords (Victim log) = 0`, nên riêng phiên cũ đó chưa có bằng chứng log agent gửi thành công sự kiện từ Victim. Đường log đã được sửa và xác nhận hoạt động trong phiên ngày 04/11 ở phần cập nhật bên dưới; nhận định “log Victim chưa hoạt động” không còn áp dụng cho phiên cuối mới nhất.
 
-**Đánh giá cho buổi bảo vệ:** mô hình Random Forest đã tạo **một cảnh báo ML thật** trên lưu lượng SSH live, nên có thể trình bày chức năng định tuyến, phân loại và hiển thị cảnh báo. Mức phát hiện quan sát được chỉ là **1/12 flow bị gắn nhãn tấn công**; LightGBM không đánh dấu flow nào trong ảnh. Kết quả này chưa đủ để nói model SSH hoạt động ổn định hoặc đạt tỷ lệ phát hiện cao trong lab. Tab SSH hiện chưa trực quan hơn Overview vì phần dữ liệu log Victim đang trống. Chỉ sau khi số `Failed passwords` và bảng `Failed logins by source` tăng, thầy mới nhìn rõ được sự khác biệt giữa **số lần sai mật khẩu từ log** và **số kết nối được ML đánh dấu**.
+**Đánh giá cho buổi bảo vệ:** mô hình Random Forest đã tạo **một cảnh báo ML thật** trên lưu lượng SSH live, nên có thể trình bày chức năng định tuyến, phân loại và hiển thị cảnh báo. Mức phát hiện quan sát được chỉ là **1/12 flow bị gắn nhãn tấn công**; LightGBM không đánh dấu flow nào trong lượt tương ứng. Kết quả này chưa đủ để nói model SSH hoạt động ổn định hoặc đạt tỷ lệ phát hiện cao trong lab. Trang SSH hiện đã hiển thị riêng số lần sai mật khẩu từ log Victim, biểu đồ theo cửa sổ 10 giây, kết quả phân loại flow và cảnh báo model, giúp phân biệt bằng chứng hành vi với dự đoán ML.
 
 Kiểm tra chẩn đoán model v1 trên hai file lab đã lưu (`12` flow Hydra và `14` flow đăng nhập bình thường) cho thấy Random Forest đánh dấu tấn công **1/12** flow Hydra và **0/14** flow bình thường; LightGBM đánh dấu **0/12** Hydra nhưng **11/14** flow bình thường. Đây không phải đánh giá ổn định vì chỉ có một lượt thu cho mỗi nhóm. Đặc biệt, không thể tăng tỷ lệ cảnh báo bằng cách hạ ngưỡng rồi gọi đó là cải thiện model: xác suất của hai nhóm chồng lấn và nguy cơ báo nhầm tăng. Cần các phiên tấn công và phiên bình thường **độc lập**, có nhãn theo từng phiên, rồi mới so sánh tỷ lệ phát hiện và báo nhầm trên dữ liệu chưa dùng để chỉnh model.
 
@@ -106,8 +106,30 @@ Khi thuyết trình, cần phân biệt **tỷ lệ flow bị đánh dấu** v�
 
 ![Random Forest sau khi thử script nhiều vòng](reports/demo_2026-11-02/ssh_random_forest_three_rounds_overview.png)
 
+### Cập nhật xác nhận cuối — hai model SSH ngày 04/11/2026
+
+Hai phiên mới nhất sử dụng trang SSH riêng, sensor bắt TCP/22 trên IDS và agent đọc `Failed password` trên Victim. Mỗi model được chọn trước khi tạo một lượt traffic mới bằng script giới hạn `--rounds 1`. Kết quả quan sát được:
+
+| Chỉ số trên trang SSH | Random Forest | LightGBM |
+| --- | ---: | ---: |
+| Failed passwords từ log Victim | 59 | 58 |
+| SSH TCP flows do IDS thu được | 12 | 11 |
+| Flow được model đánh dấu SSH Brute Force | 1 | 0 |
+| Flow được model xếp benign | 11 | 11 |
+| Tỷ lệ flow bị model gắn cờ | 8,3% | 0% |
+| Cảnh báo model | Lô #519, `HIGH`, lúc 15:07:24; phát hiện 1 flow | Không có cảnh báo ML |
+| Cảnh báo log | Ít nhất 10 lần thất bại từ `192.168.247.10` trong 60 giây | Ít nhất 10 lần thất bại từ `192.168.247.10` trong 60 giây |
+
+![Kết quả SSH Random Forest cuối ngày 04/11/2026](reports/demo_2026-11-04/ssh_random_forest_final.png)
+
+![Kết quả SSH LightGBM cuối ngày 04/11/2026](reports/demo_2026-11-04/ssh_lightgbm_final.png)
+
+Hai tín hiệu trong ảnh phải được diễn giải riêng: `59` và `58` là số lần xác thực thất bại lấy từ journal của Victim; `1/12 (8,3%)` và `0/11 (0%)` là kết quả phân loại flow của từng model. Cảnh báo log chứng minh hành vi thử mật khẩu lặp lại đã xảy ra ở cả hai phiên. Random Forest tạo được một cảnh báo ML, trong khi LightGBM không gắn cờ flow nào trong lượt quan sát mới nhất. Tỷ lệ 8,3% và 0% là tỷ lệ flow bị gắn cờ trong từng phiên, không phải accuracy, precision hoặc recall của model. Hai phiên có số flow khác nhau và không có nhãn đúng độc lập cho từng flow, vì vậy chỉ có thể kết luận Random Forest nhạy hơn trong hai lượt demo này, không thể dùng chúng để xếp hạng độ chính xác tổng quát.
+
+Kết quả được lưu riêng theo tên model trong SQLite. Khi chuyển dropdown từ Random Forest sang LightGBM, dữ liệu Random Forest không bị sửa hoặc dùng để cập nhật trọng số LightGBM; model chỉ thực hiện suy luận, không tự huấn luyện lại trong lúc demo. Trang LightGBM chỉ hiển thị các bản ghi mang tên LightGBM, còn kết quả Random Forest vẫn được giữ để xem lại khi chọn lại model. Tuy nhiên detector chỉ xử lý **flow mới chưa đọc** bằng model đang được chọn; đổi sang LightGBM không làm các flow Random Forest cũ được dự đoán lại. Để so sánh công bằng, cần chọn LightGBM, reset riêng trang/model đó, làm sạch file runtime bằng sensor `--reset`, rồi tạo một lượt traffic SSH mới với cùng cấu hình script.
+
 ## 5. Khả năng áp dụng ngoài lab và kết luận
 
 Buổi demo chứng minh pipeline có thể bắt traffic VM, tạo flow, chạy model và đưa kết quả lên dashboard trong cấu hình đã thử. Nó **không chứng minh** hệ thống phát hiện mọi HTTP flood hoặc SSH brute force ngoài thực tế, cũng không xác nhận một tỷ lệ cảnh báo cố định khi nhiều máy cùng truy cập Victim. Các nguồn truy cập thật có thể gồm người dùng bình thường, bot, công cụ và mạng với đặc điểm rất khác. Model có thể báo nhầm hoặc bỏ sót; cần dữ liệu kiểm thử độc lập có nhãn đúng, nhiều kịch bản và đo precision/recall live để kết luận định lượng.
 
-**Kết luận phần DDoS của demo cuối:** pipeline bắt flow và đưa cảnh báo từ cả Kali lẫn Bot lên dashboard bằng cả Random Forest và LightGBM. LightGBM gắn nhãn DDoS cho tỷ lệ flow cao hơn trong hai ảnh; chưa có phép đo độ chính xác live. **Phần SSH ngày 02/11:** Random Forest đánh dấu 1/12 flow, LightGBM 0/11; đường log Victim chưa có dữ liệu trên tab SSH và cần kiểm tra trước khi gọi đây là demo SSH đầy đủ. Theo yêu cầu mới về khả năng dự đoán SSH rõ hơn, cần thu và đánh giá thêm các phiên lab độc lập trước khi thay model; không chỉnh nhãn hoặc ngưỡng chỉ để có nhiều cảnh báo trong demo.
+**Kết luận phần DDoS của demo cuối:** pipeline bắt flow và đưa cảnh báo từ cả Kali lẫn Bot lên dashboard bằng cả Random Forest và LightGBM. LightGBM gắn nhãn DDoS cho tỷ lệ flow cao hơn trong hai ảnh; chưa có phép đo độ chính xác live. **Phần SSH cập nhật đến 04/11:** đường log Victim đã hoạt động ở cả hai lượt. Random Forest ghi 59 lần sai mật khẩu, thu 12 flow và gắn cờ 1 flow (8,3%); LightGBM ghi 58 lần sai mật khẩu, thu 11 flow và gắn cờ 0 flow. Kết quả xác nhận pipeline hoạt động trong lab và cho thấy Random Forest tạo được cảnh báo ML trong lượt demo cuối, nhưng vẫn cần nhiều phiên tấn công và bình thường độc lập để đánh giá độ ổn định; không chỉnh nhãn hoặc ngưỡng chỉ để có nhiều cảnh báo trong demo.

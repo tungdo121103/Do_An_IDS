@@ -65,8 +65,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ssh-idle-timeout",
         type=float,
-        default=10.0,
+        default=5.0,
         help="Flush a TCP/22 flow after this many seconds without a packet.",
+    )
+    parser.add_argument(
+        "--health-interval",
+        type=float,
+        default=10.0,
+        help="Print packet-capture health every this many seconds.",
     )
     parser.add_argument("--output", type=Path, default=LIVE_FLOWS_PATH, help="live_flows.csv output path.")
     parser.add_argument("--reset", action="store_true", help="Clear live_flows.csv before capture.")
@@ -77,8 +83,8 @@ def parse_args() -> argparse.Namespace:
     if args.attacker_ip:
         attacker_ips.extend(ip.strip() for ip in args.attacker_ip if ip.strip())
     args.attacker_ips = sorted(set(attacker_ips))
-    if args.window <= 0 or args.ssh_idle_timeout <= 0:
-        parser.error("--window and --ssh-idle-timeout must be positive")
+    if args.window <= 0 or args.ssh_idle_timeout <= 0 or args.health_interval <= 0:
+        parser.error("--window, --ssh-idle-timeout and --health-interval must be positive")
     return args
 
 
@@ -295,19 +301,25 @@ def main() -> None:
     flows: dict[tuple[str, int, str, int, int], FlowStat] = {}
     flows_lock = Lock()
     last_flush = time.time()
+    last_health = time.time()
+    captured_ip_packets = 0
+    matched_lab_packets = 0
 
     if args.reset:
         args.output.write_text("", encoding="utf-8")
 
     def handle_packet(packet) -> None:
+        nonlocal captured_ip_packets, matched_lab_packets
         if IP not in packet:
             return
 
+        captured_ip_packets += 1
         ip_layer = packet[IP]
         if args.victim_ip not in {ip_layer.src, ip_layer.dst}:
             return
         if not ({ip_layer.src, ip_layer.dst} & set(args.attacker_ips)):
             return
+        matched_lab_packets += 1
 
         key = flow_key(packet, args.victim_ip)
         with flows_lock:
@@ -333,7 +345,9 @@ def main() -> None:
     print(f"TCP/22: complete connection or {args.ssh_idle_timeout:g}s idle; other traffic: {args.window:g}s windows")
     print("Press Ctrl+C to stop.")
 
-    sniffer = AsyncSniffer(iface=args.interface, prn=handle_packet, store=False)
+    # IDS is observing traffic between two other VMs, so promiscuous capture must
+    # be requested explicitly. VMware/virtual-switch policy must also allow it.
+    sniffer = AsyncSniffer(iface=args.interface, prn=handle_packet, store=False, promisc=True)
     sniffer.start()
     try:
         while True:
@@ -342,9 +356,22 @@ def main() -> None:
             flush_non_ssh = now - last_flush >= args.window
             with flows_lock:
                 ready = pop_ready_flows(flows, now, flush_non_ssh, args.ssh_idle_timeout)
+                active_flow_count = len(flows)
             flush_flows(ready, feature_columns, args.output)
             if flush_non_ssh:
                 last_flush = now
+            if now - last_health >= args.health_interval:
+                print(
+                    f"[{time.strftime('%H:%M:%S')}] capture health: "
+                    f"{captured_ip_packets} IP packets, {matched_lab_packets} lab packets, "
+                    f"{active_flow_count} active flows"
+                )
+                if captured_ip_packets > 0 and matched_lab_packets == 0:
+                    print(
+                        "WARNING: interface is active but no victim/attacker packets are visible; "
+                        "check the selected interface and VMware promiscuous mode."
+                    )
+                last_health = now
     except KeyboardInterrupt:
         print("Stopped live sensor.")
     finally:
